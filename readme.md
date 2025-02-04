@@ -1,11 +1,19 @@
 # Introduction
+
 Access Hub is a multifunctional app designed with accessibility in mind that aims to include the most useful tools in one place, Without having to install lots of apps for your daily tasks. This app bundles a collection of powerful tools in one place, While focusing on each function within the app itself to be as better as possible.
+
 Please note the following:
+
 The app may not be ready for public use, It is for beta testing for now. Though the app is mostly very stable enough in most tasks: You might find bugs, Because this is a beta version, and since this is the first version.
+
 Some features are not yet well-designed due to some reasons.
+
 There are, of course, some undescovered bugs I might not know about them. Please help by testing the app and leave your feedback by contacting me, Find contact info section below.
+
 # What does this have?
+
 Currently: The app has a small number of tools which are as follows.
+
 - Text tools: Allows you to get info about a spicific text, As well as split the text with customization.
 - Task scheduler: Allows you to schedule tasks and reminders at spicific time periods.
 - Shutdown control: Allows you to shutdown or restart the device at a spicific time.
@@ -17,7 +25,9 @@ Currently: The app has a small number of tools which are as follows.
 - Speech to text recognition: More detailed explanation below.
 
 ## Network player
+
 Features:
+
 - YouTube Search: Directly search YouTube from within the application and browse results in an accessible list format.
 - YouTube Link Playback: Paste YouTube links to stream videos or audio directly, with options to select playback quality.
 - Direct Link Playback: Play media streams from direct URLs, supporting various online media formats.
@@ -27,7 +37,9 @@ Features:
 - download features (Experimental).
 
 ### Available shortcuts
+
 The following shortcuts work in the player window when playing a link or a video from the search results. Please note that many shortcuts are available only for youtube.
+
 - Left and right arrows: Rewind or forward by 5 seconds.
 - Up and down arrows: Increase or decrease the volume.
 - Control + up or control + down arrow: Increase or decrease speed.
@@ -46,18 +58,27 @@ The following shortcuts work in the player window when playing a link or a video
 - Right bracket ], or right brace }: End of selection marker.
 - Control + c: Copy the video link to clipboard.
 - Control + s: Save the selected marker as an audio file.
+
 To access other features, Such as subtitles or video description: Press the alt key to access the menu in the player window.
 
 ## Accessible terminal
+
 For users who need to manage remote servers or network devices, Access Hub includes an Accessible SSH Terminal. What makes it different is that there are some users who don't like the default style of windows terminal, Which sometimes is not as good as a normal textbox, This is the main reason behind this tool.
+
 Session Management: Save and manage your SSH connection details for frequent access, securely storing session information with encryption.
+
 File Manager Integration: Seamlessly transition to a file manager view for your SSH session, allowing for graphical file browsing and transfer on the remote server.
 
 ## Speech recognition
+
 Access Hub includes a basic speech recognition using "Google", Allowing you to record a phrase and automatically type it anywhere. The reason behind this feature is that windows speech recognition by default is not good. Though access Hub has a basic speech recognition that only supports one service for now: there are plans to develop this in the future.
+
 The shortcut for start recording is control + shift + h. Press once to record, Again to type the result.
+
 Please note that it automatically detects and uses your keyboard language, There is no way of changing the language for now without changing the keyboard language, Though this will be added in the future.
 
 ## Contact me
+
 Please help me by reporting bugs and leaving your feedback thrugh the following ways:
+
 You can always get my contact info thrugh the main menu of the app, By pressing alt and choosing contact us. Choose the appropriate method that works well for you.
