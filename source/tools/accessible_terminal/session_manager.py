@@ -67,7 +67,7 @@ class SessionManager:
             conn.commit()
 
         except sqlite3.IntegrityError:
-             wx.MessageBox(f"A session with the name '{name}' already exists.", "Error", wx.OK | wx.ICON_ERROR)
+            wx.MessageBox(f"A session with the name '{name}' already exists.", "Error", wx.OK | wx.ICON_ERROR)
         finally:
             conn.close()
 
