@@ -1,0 +1,34 @@
+[project]
+name = "access-hub"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "accessible-output3",
+    "cryptography>=44.0.1",
+    "httpx==0.27.0",
+    "keyboard>=0.13.5",
+    "keyring>=25.6.0",
+    "paramiko>=3.5.1",
+    "passwordmeter>=0.1.8",
+    "pwnedpasswords>=2.0.0",
+    "pyaudio>=0.2.14",
+    "pyautogui>=0.9.54",
+    "pydub>=0.25.1",
+    "pyopenssl>=25.0.0",
+    "pyperclip>=1.9.0",
+    "python-vlc>=3.0.21203",
+    "requests>=2.32.3",
+    "speechrecognition>=3.14.1",
+    "speedtest-cli>=2.1.3",
+    "srt>=3.5.3",
+    "win11toast>=0.35",
+    "wxpython>=4.2.2",
+    "youtube-comment-downloader>=0.1.76",
+    "youtube-search-python>=1.6.6",
+    "yt-dlp>=2025.2.19",
+]
+
+[tool.uv.sources]
+accessible-output3 = { git = "https://github.com/SigmaNight/accessible_output3" }
