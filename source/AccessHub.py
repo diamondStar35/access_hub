@@ -14,6 +14,7 @@ from tools.task_scheduler import TaskScheduler
 from tools.eleven_labs.eleven_labs import ElevenLabs
 from tools.accessible_terminal.session_viewer import SessionViewer
 from tools.speed_test import SpeedTest
+from tools.online_tts import OnlineTTS
 from tools.updater import Updater
 from speech import speak
 from passwordmeter import test
@@ -108,6 +109,7 @@ class AccessHub(wx.Frame):
             "ElevenLabs": self.on_elevenlabs,
             "Accessible SSH Terminal": self.on_ssh_terminal,
             "Internet Speed Test": self.on_speed_test,
+            "Online Text to Speech": self.on_online_tts,
         }
 
         for tool_name, handler in tools.items():
@@ -275,6 +277,12 @@ class AccessHub(wx.Frame):
         self.add_child_frame(self.speed_test_frame)
         self.speed_test_frame.Show()
 
+    def on_online_tts(self, event):
+        """Handles the Online TTS tool."""
+        online_tts_frame = OnlineTTS(self, title="Online Text to Speech")
+        self.add_child_frame(online_tts_frame)
+        online_tts_frame.Show()
+
     def on_about(self, event):
         about_dialog = AboutDialog(self, title=f"About {app_vars.app_name}")
         about_dialog.ShowModal()
@@ -315,7 +323,7 @@ class AccessTaskBarIcon(wx.adv.TaskBarIcon):
     def __init__(self, frame):
         super(AccessTaskBarIcon, self).__init__()
         self.frame = frame
-        icon = wx.Icon(app_vars.icon)
+        icon = wx.Icon("icon.ico")
         self.SetIcon(icon, "Access Hub") # Tooltip
         self.Bind(wx.adv.EVT_TASKBAR_LEFT_DOWN, self.on_left_down) # Restore on left click
 

@@ -3,7 +3,7 @@ python-vlc
 yt-dlp
 youtube-search-python
 httpx==0.27.0
-git+https://github.com/SigmaNight/accessible_output3
+accessible-output3
 passwordmeter
 pwnedpasswords
 pyOpenSSL
@@ -21,3 +21,6 @@ speedtest-cli
 pyaudio
 youtube_comment_downloader
 srt
+msspeech
+gtts
+langdetect
