@@ -1,6 +1,6 @@
 import wx
 from wx.lib.newevent import NewEvent
-from tools.network_player.custom_button import CustomButton
+from gui.custom_controls import CustomButton
 import vlc
 import sys
 import threading

@@ -3,7 +3,7 @@ from wx.lib.newevent import NewEvent
 import yt_dlp
 from youtube_comment_downloader.downloader import YoutubeCommentDownloader, SORT_BY_POPULAR
 import app_vars
-from tools.network_player.custom_button import CustomButton
+from gui.custom_controls import CustomButton
 from tools.network_player.comments import CommentsDialog
 from tools.network_player.download_dialog import DownloadDialog
 from tools.network_player.subtitle_manager import SubtitleManager

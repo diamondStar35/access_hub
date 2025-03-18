@@ -1,4 +1,5 @@
 import wx
+from gui.custom_controls import CustomSlider
 import requests
 import concurrent.futures
 import io
@@ -32,7 +33,7 @@ class SoundGeneration(wx.Panel):
 
         prompt_influence_sizer = wx.BoxSizer(wx.VERTICAL)
         prompt_influence_label = wx.StaticText(self, label="Prompt Influence:")
-        self.prompt_influence_slider = wx.Slider(self, value=30, minValue=0, maxValue=100, style=wx.SL_HORIZONTAL)
+        self.prompt_influence_slider = customSlider(self, value=30, minValue=0, maxValue=100, style=wx.SL_HORIZONTAL)
         prompt_influence_sizer.Add(prompt_influence_label, 0, wx.ALIGN_CENTER)
         prompt_influence_sizer.Add(self.prompt_influence_slider, 1, wx.EXPAND)
 

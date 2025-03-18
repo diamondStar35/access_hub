@@ -1,5 +1,6 @@
 import wx
 import app_vars
+from gui.custom_controls import CustomSlider
 from tools.eleven_labs.speech_to_speech import ElevenLabsSTS
 from tools.eleven_labs.audio_isolator import AudioIsolation
 from tools.eleven_labs.sound_generator import SoundGeneration
@@ -38,21 +39,21 @@ class ElevenLabsTTS(wx.Panel):
 
         stability_sizer = wx.BoxSizer(wx.VERTICAL)
         stability_label = wx.StaticText(self, label="Stability:")
-        self.stability_slider = wx.Slider(self, value=50, minValue=0, maxValue=100, style=wx.SL_HORIZONTAL)
+        self.stability_slider = CustomSlider(self, value=50, minValue=0, maxValue=100, style=wx.SL_HORIZONTAL)
         stability_sizer.Add(stability_label, 0, wx.ALIGN_CENTER)
         stability_sizer.Add(self.stability_slider, 1, wx.EXPAND)
         voice_settings_sizer.Add(stability_sizer, 1, wx.EXPAND | wx.ALL, 5)
 
         similarity_sizer = wx.BoxSizer(wx.VERTICAL)
         similarity_label = wx.StaticText(self, label="Similarity:")
-        self.similarity_slider = wx.Slider(self, value=75, minValue=0, maxValue=100, style=wx.SL_HORIZONTAL)
+        self.similarity_slider = customSlider(self, value=75, minValue=0, maxValue=100, style=wx.SL_HORIZONTAL)
         similarity_sizer.Add(similarity_label, 0, wx.ALIGN_CENTER)
         similarity_sizer.Add(self.similarity_slider, 1, wx.EXPAND)
         voice_settings_sizer.Add(similarity_sizer, 1, wx.EXPAND | wx.ALL, 5)
 
         style_exaggeration_sizer = wx.BoxSizer(wx.VERTICAL)
         style_exaggeration_label = wx.StaticText(self, label="Style Exaggeration:")
-        self.style_exaggeration_slider = wx.Slider(self, value=0, minValue=0, maxValue=100, style=wx.SL_HORIZONTAL)
+        self.style_exaggeration_slider = customSlider(self, value=0, minValue=0, maxValue=100, style=wx.SL_HORIZONTAL)
         style_exaggeration_sizer.Add(style_exaggeration_label, 0, wx.ALIGN_CENTER)
         style_exaggeration_sizer.Add(self.style_exaggeration_slider, 1, wx.EXPAND)
         voice_settings_sizer.Add(style_exaggeration_sizer, 1, wx.EXPAND | wx.ALL, 5)
