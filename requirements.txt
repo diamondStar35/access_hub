@@ -24,3 +24,4 @@ srt
 msspeech
 gtts
 langdetect
+configobj

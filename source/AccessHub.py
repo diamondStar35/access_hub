@@ -5,6 +5,7 @@ import sys
 import shutil
 import webbrowser
 import app_vars
+from gui.settings import SettingsDialog, GeneralSettingsPanel
 from tools.text_utils import TextUtilitiesApp
 from tools.shutdown_control import ShutdownControl
 from tools.network_player.media_player import DirectLinkPlayer, EVT_VLC_READY
@@ -14,7 +15,7 @@ from tools.task_scheduler import TaskScheduler
 from tools.eleven_labs.eleven_labs import ElevenLabs
 from tools.accessible_terminal.session_viewer import SessionViewer
 from tools.speed_test import SpeedTest
-from tools.online_tts import OnlineTTS
+from tools.online_tts.online_tts import OnlineTTS
 from tools.updater import Updater
 from speech import speak
 from passwordmeter import test
@@ -74,6 +75,10 @@ class AccessHub(wx.Frame):
         self.recognizer = sr.Recognizer()
         self.recording_thread = None
         self.executor = concurrent.futures.ThreadPoolExecutor(max_workers=1)
+        self.settings_dialog = SettingsDialog(self)  # Instantiate settings dialog for config access
+        self.settings_dialog.add_category(GeneralSettingsPanel)
+        config_path = self.settings_dialog.get_config_path()
+        self.config = self.settings_dialog.load_config()
 
         # taskbar icon
         self.tbIcon = AccessTaskBarIcon(self)
@@ -129,14 +134,21 @@ class AccessHub(wx.Frame):
 
     def create_menu_bar(self):
         menu_bar = wx.MenuBar()
-        help_menu = wx.Menu()
 
+        app_menu = wx.Menu()
+        settings_item = app_menu.Append(wx.ID_ANY, "&Settings", "Open the settings dialog")
+        self.Bind(wx.EVT_MENU, self.on_settings, settings_item)
+        quit_item = app_menu.Append(wx.ID_EXIT, "&Quit", "Quit the application")
+        self.Bind(wx.EVT_MENU, self.on_quit, quit_item)
+
+        help_menu = wx.Menu()
         about_item = help_menu.Append(wx.ID_ABOUT, "&About", "Information about this application")
         self.Bind(wx.EVT_MENU, self.on_about, about_item)
 
         contact_item = help_menu.Append(wx.ID_ANY, "&Contact Us", "Contact the developer")
         self.Bind(wx.EVT_MENU, self.on_contact_us, contact_item)
 
+        menu_bar.Append(app_menu, "&App")
         menu_bar.Append(help_menu, "&Help")
         self.SetMenuBar(menu_bar)
 
@@ -283,6 +295,19 @@ class AccessHub(wx.Frame):
         self.add_child_frame(online_tts_frame)
         online_tts_frame.Show()
 
+    def on_settings(self, event):
+        settings_dialog = SettingsDialog(self)
+        settings_dialog.add_category(GeneralSettingsPanel)
+        settings_dialog.ShowModal()
+        settings_dialog.Destroy()
+        # Reload Config After Settings Dialog Closes ---
+        self.config = self.settings_dialog.load_config()
+
+    def on_quit(self, event):
+        """Handles the Quit menu item."""
+        self.close_all_children()
+        wx.Exit()
+
     def on_about(self, event):
         about_dialog = AboutDialog(self, title=f"About {app_vars.app_name}")
         about_dialog.ShowModal()
@@ -315,15 +340,23 @@ class AccessHub(wx.Frame):
                 pass
 
     def OnClose(self, event):
-        # Minimize to tray instead of closing
-        self.Hide()
-        event.Veto()
+        # Minimize to tray instead of closing, based on setting
+        minimize_on_close = self.config.get('General', {}).get('minimize_on_close', True)
+        if minimize_on_close == 'False': minimize_on_close = False
+
+        if minimize_on_close:
+            self.Hide()
+            event.Veto()
+        else:
+            self.close_all_children()
+            wx.Exit()
+
 
 class AccessTaskBarIcon(wx.adv.TaskBarIcon):
     def __init__(self, frame):
         super(AccessTaskBarIcon, self).__init__()
         self.frame = frame
-        icon = wx.Icon("app_vars.icon")
+        icon = wx.Icon(app_vars.icon)
         self.SetIcon(icon, "Access Hub") # Tooltip
         self.Bind(wx.adv.EVT_TASKBAR_LEFT_DOWN, self.on_left_down) # Restore on left click
 
