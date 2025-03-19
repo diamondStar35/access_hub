@@ -11,8 +11,9 @@ from tools.shutdown_control import ShutdownControl
 from tools.network_player.media_player import DirectLinkPlayer, EVT_VLC_READY
 from tools.network_player.youtube_search import YoutubeSearchDialog
 from tools.network_player.youtube_streamer import YoutubeStreamer
+from tools.network_player.settings import YoutubeSettings
 from tools.task_scheduler import TaskScheduler
-from tools.eleven_labs.eleven_labs import ElevenLabs
+from tools.eleven_labs.eleven_labs import ElevenLabs, ElevenLabsSettings
 from tools.accessible_terminal.session_viewer import SessionViewer
 from tools.speed_test import SpeedTest
 from tools.online_tts.online_tts import OnlineTTS
@@ -129,7 +130,10 @@ class AccessHub(wx.Frame):
         self.Centre()
         self.Show(True)
         self.start_hotkey_listener()
-        self.check_for_updates()
+        check_updates = self.config.get('General', {}).get('check_for_updates', 'True')
+        check_updates = check_updates.lower() == 'true'
+        if check_updates:
+            self.check_for_updates()
 
 
     def create_menu_bar(self):
@@ -243,29 +247,34 @@ class AccessHub(wx.Frame):
 
     def on_text_utilities(self, event):
         text_utils_app = TextUtilitiesApp(None, title="Text Utilities")
-        text_utils_app.Show()
         self.add_child_frame(text_utils_app)
+        self.manage_main_window_visibility(text_utils_app)
+        text_utils_app.Show()
 
     def on_shutdown_control(self, event):
         shutdown_control = ShutdownControl()
-        shutdown_control.Show()
         self.add_child_frame(shutdown_control)
+        self.manage_main_window_visibility(shutdown_control)
+        shutdown_control.Show()
 
     def on_password_doctor(self, event):
         password_doctor = PasswordDoctorDialog(self)
-        password_doctor.Show()
         self.add_child_frame(password_doctor)
+        self.manage_main_window_visibility(password_doctor)
+        password_doctor.Show()
 
     def on_network_player(self, event):
         self.network_player = NetworkPlayerFrame(self, "Network Player")
         self.add_child_frame(self.network_player)
         self.network_player.Bind(wx.EVT_CLOSE, self.network_player.OnClose)
+        self.manage_main_window_visibility(self.network_player)
 
     def on_task_scheduler(self, event):
         if self.task_scheduler is None:  # Create only if it doesn't exist
             self.task_scheduler = TaskScheduler(self)
             self.task_scheduler.Bind(wx.EVT_CLOSE, self.on_task_scheduler_close)
             self.add_child_frame(self.task_scheduler)
+        self.manage_main_window_visibility(self.task_scheduler)
         self.task_scheduler.Show()
         self.task_scheduler.Raise()
 
@@ -276,28 +285,33 @@ class AccessHub(wx.Frame):
 
     def on_elevenlabs(self, event):
         elevenlabs = ElevenLabs(self)
-        elevenlabs.Show()
         self.add_child_frame(elevenlabs)
+        self.manage_main_window_visibility(elevenlabs)
+        elevenlabs.Show()
 
     def on_ssh_terminal(self, event):
         accessible_terminal = SessionViewer(self, app_vars.app_name)
-        accessible_terminal.Show()
         self.add_child_frame(accessible_terminal)
+        self.manage_main_window_visibility(accessible_terminal)
+        accessible_terminal.Show()
 
     def on_speed_test(self, event):
-        self.speed_test_frame = SpeedTest(self, title="Internet Speed Test")
-        self.add_child_frame(self.speed_test_frame)
-        self.speed_test_frame.Show()
+        self.speed_test= SpeedTest(self, title="Internet Speed Test")
+        self.add_child_frame(self.speed_test)
+        self.speed_test.ShowModal()
 
     def on_online_tts(self, event):
         """Handles the Online TTS tool."""
         online_tts_frame = OnlineTTS(self, title="Online Text to Speech")
         self.add_child_frame(online_tts_frame)
+        self.manage_main_window_visibility(online_tts_frame)
         online_tts_frame.Show()
 
     def on_settings(self, event):
         settings_dialog = SettingsDialog(self)
         settings_dialog.add_category(GeneralSettingsPanel)
+        settings_dialog.add_category(ElevenLabsSettings)
+        settings_dialog.add_category(YoutubeSettings)
         settings_dialog.ShowModal()
         settings_dialog.Destroy()
         # Reload Config After Settings Dialog Closes ---
@@ -321,6 +335,27 @@ class AccessHub(wx.Frame):
     def add_child_frame(self, frame):
         self.child_frames.append(frame)
         frame.Bind(wx.EVT_CLOSE, lambda event, f=frame: self.on_child_close(event,f)) #Listen to child's close events
+
+    def manage_main_window_visibility(self, child_frame, show_on_close=True):
+        """Hides or shows the main window based on the settings.
+
+        Args:
+            child_frame: The child frame (tool) being opened.
+            show_on_close: Whether to automatically show the main window
+                           when the child frame is closed.
+        """
+        hide_on_open = self.config.get('General', {}).get('hide_on_open', 'True')
+        hide_on_open = hide_on_open.lower() == 'true'
+
+        if hide_on_open:
+            self.Hide()
+
+            if show_on_close:
+                def delayed_show(event):
+                    self.Show()
+                    self.Raise()
+                    event.Skip()
+                child_frame.Bind(wx.EVT_CLOSE, delayed_show)
 
     def on_child_close(self, event, frame):
         try:

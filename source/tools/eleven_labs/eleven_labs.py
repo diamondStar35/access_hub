@@ -1,9 +1,11 @@
 import wx
 import app_vars
 from gui.custom_controls import CustomSlider
+from gui.settings import SettingsPanel
 from tools.eleven_labs.speech_to_speech import ElevenLabsSTS
 from tools.eleven_labs.audio_isolator import AudioIsolation
 from tools.eleven_labs.sound_generator import SoundGeneration
+from configobj import ConfigObj
 import os
 import json
 import requests
@@ -15,7 +17,7 @@ from pydub import AudioSegment
 class ElevenLabsTTS(wx.Panel):
     def __init__(self, parent, api_key, ffmpeg_path):
         super().__init__(parent)
-        self.api_key = api_key
+        self.api_key=api_key
         self.voices = []
         self.tts_models = {}
         self.executor = concurrent.futures.ThreadPoolExecutor(max_workers=1)
@@ -286,56 +288,27 @@ After conversion: You will have {chars_after} characters remaining."""
 class ElevenLabs(wx.Frame):
     def __init__(self, parent, title="ElevenLabs"):
         super().__init__(parent, title=title)
-        self.settings_file = os.path.join(wx.StandardPaths.Get().GetUserConfigDir(), app_vars.app_name, "settings.json")
-        self.api_key = self.load_api_key()
-        self.ffmpeg_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'ffmpeg.exe')
-
+        self.config = self.load_config()
+        self.api_key = self.config.get('ElevenLabs', {}).get('api_key')
         if not self.api_key:
-            if wx.MessageBox("ElevenLabs API key not found. Would you like to add it now?", "API Key Missing", wx.YES_NO | wx.ICON_QUESTION) == wx.YES:
-                self.api_key = self.get_api_key_from_user()
+            wx.MessageBox("ElevenLabs API key is not configured. Please set it in the settings.", "API Key Missing", wx.OK | wx.ICON_ERROR)
+            wx.CallAfter(self.Close)
+            return
 
-        # Initialize UI based on API key presence
-        if self.api_key:
-            self.create_elevenlabs_ui()
-        else:
-            self.create_no_api_key_panel()
-
+        self.ffmpeg_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'ffmpeg.exe')
+        self.create_elevenlabs_ui()
         self.Centre()
         self.Show()
 
 
-    def load_api_key(self):
-        try:
-            with open(self.settings_file, "r") as f:
-                settings = json.load(f)
-                return settings.get("elevenlabs_api_key")
-        except (FileNotFoundError, json.JSONDecodeError):
-            return None
-
-    def get_api_key_from_user(self):
-        dlg = wx.TextEntryDialog(self, "Enter your ElevenLabs API key:", "API Key")
-        if dlg.ShowModal() == wx.ID_OK:
-            api_key = dlg.GetValue()
-            try:
-                os.makedirs(os.path.dirname(self.settings_file), exist_ok=True)
-                with open(self.settings_file, "w") as f:
-                    json.dump({"elevenlabs_api_key": api_key}, f)
-                return api_key
-            except OSError as e:
-                wx.MessageBox(f"Error saving API key: {e}", "Error", wx.OK | wx.ICON_ERROR)
-                return None
-        return None
-
-    def create_no_api_key_panel(self):
-        panel = wx.Panel(self)
-        sizer = wx.BoxSizer(wx.VERTICAL)
-        message = wx.StaticText(panel, label="ElevenLabs API key is missing. Please configure it to use this tool.")
-        sizer.Add(message, 0, wx.ALL | wx.CENTER, 10)
-        panel.SetSizer(sizer)
-
-        frame_sizer = wx.BoxSizer()
-        frame_sizer.Add(panel, 1, wx.EXPAND)
-        self.SetSizer(frame_sizer)
+    def load_config(self):
+        """Loads or creates the config file."""
+        config_dir = os.path.join(wx.StandardPaths.Get().GetUserConfigDir(), app_vars.app_name)
+        config_path =  os.path.join(config_dir, "settings.ini")
+        config = ConfigObj(config_path)
+        if 'ElevenLabs' not in config:
+            config['ElevenLabs'] = {}
+        return config
 
     def create_elevenlabs_ui(self):
         notebook = wx.Notebook(self)
@@ -351,3 +324,19 @@ class ElevenLabs(wx.Frame):
         sizer = wx.BoxSizer()
         sizer.Add(notebook, 1, wx.EXPAND)
         self.SetSizer(sizer)
+
+class ElevenLabsSettings(SettingsPanel):
+    category_name = "ElevenLabs"
+
+    def create_controls(self):
+        self.api_key_label = wx.StaticText(self, label="API Key:")
+        self.api_key_text = wx.TextCtrl(self, style=wx.TE_PASSWORD)  # Password style
+        self.sizer.Add(self.api_key_label, 0, wx.ALL, 5)
+        self.sizer.Add(self.api_key_text, 0, wx.EXPAND | wx.ALL, 5)
+
+    def load_settings(self):
+        api_key = self.config.get('ElevenLabs', {}).get('api_key', '')
+        self.api_key_text.SetValue(api_key)
+
+    def save_settings(self):
+        self.config.setdefault('ElevenLabs', {})['api_key'] = self.api_key_text.GetValue()

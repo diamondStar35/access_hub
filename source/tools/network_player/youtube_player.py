@@ -14,6 +14,7 @@ import threading
 import time
 import os
 import subprocess
+from configobj import ConfigObj
 import srt
 from datetime import timedelta
 
@@ -42,6 +43,7 @@ class YoutubePlayer(wx.Frame):
         self.ffmpeg_path = os.path.join(project_root, 'ffmpeg.exe')
         self.subtitle_manager = None
 
+        self.load_settings()
         self.create_menu_bar()
         self.SetSize(wx.DisplaySize())
         self.Maximize(True)
@@ -90,6 +92,15 @@ class YoutubePlayer(wx.Frame):
         threading.Thread(target=self.init_vlc_thread).start()
         self.Bind(EVT_VLC_READY, self.onVlcReady)
 
+
+    def load_settings(self):
+        """Loads settings from the config file."""
+        config_path = os.path.join(wx.StandardPaths.Get().GetUserConfigDir(), app_vars.app_name, "settings.ini")
+        self.config = ConfigObj(config_path)
+        youtube_settings = self.config.get('YouTube', {})
+        self.fast_forward_interval = int(youtube_settings.get('fast_forward_interval', 5))
+        self.rewind_interval = int(youtube_settings.get('rewind_interval', 5))
+        self.default_volume = int(youtube_settings.get('default_volume', 80))
 
     def create_menu_bar(self):
         menubar = wx.MenuBar()
@@ -140,6 +151,7 @@ class YoutubePlayer(wx.Frame):
         # Attach event handler for MediaPlayerOpening
         event_manager = self.player.event_manager()
         event_manager.event_attach(vlc.EventType.MediaPlayerOpening, self.on_media_opening)
+        self.player.audio_set_volume(self.default_volume)
         self.player.play()
         wx.PostEvent(self, VlcReadyEvent())  # Post the event after play()
 
@@ -172,7 +184,7 @@ class YoutubePlayer(wx.Frame):
         wx.CallAfter(self.hide_subtitle)
 
     def onRewind(self, event):
-        self.player.set_time(self.player.get_time() - 5000)
+        self.player.set_time(self.player.get_time() - (self.rewind_interval * 1000))
 
     def onPause(self, event):
         if self.player.is_playing():
@@ -185,7 +197,7 @@ class YoutubePlayer(wx.Frame):
             speak("Play")
 
     def onForward(self, event):
-        self.player.set_time(self.player.get_time() + 5000)
+        self.player.set_time(self.player.get_time() + (self.fast_forward_interval * 1000))
 
     def onKey(self, event):
         keycode = event.GetKeyCode()

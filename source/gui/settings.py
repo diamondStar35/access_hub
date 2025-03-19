@@ -135,6 +135,14 @@ class GeneralSettingsPanel(SettingsPanel):
         self.sizer.Add(self.minimize_checkbox, 0, wx.ALL, 5)
         self.minimize_checkbox.Bind(wx.EVT_CHECKBOX, self.on_setting_change)
 
+        self.hide_main_window_checkbox = wx.CheckBox(self, label="Hide the main window when opening tools")
+        self.sizer.Add(self.hide_main_window_checkbox, 0, wx.ALL, 5)
+        self.hide_main_window_checkbox.Bind(wx.EVT_CHECKBOX, self.on_setting_change)
+
+        self.check_updates_checkbox = wx.CheckBox(self, label="Check for updates at startup")
+        self.sizer.Add(self.check_updates_checkbox, 0, wx.ALL, 5)
+        self.check_updates_checkbox.Bind(wx.EVT_CHECKBOX, self.on_setting_change)
+
     def load_settings(self):
         """Loads the settings and converts to boolean."""
         minimize_on_close = self.config.get('General', {}).get('minimize_on_close', 'True')
@@ -147,8 +155,18 @@ class GeneralSettingsPanel(SettingsPanel):
             minimize_on_close = True  # Default if somehow invalid
         self.minimize_checkbox.SetValue(minimize_on_close)
 
+        hide_on_open = self.config.get('General', {}).get('hide_on_open', 'True')
+        hide_on_open = hide_on_open.lower() == 'true'
+        self.hide_main_window_checkbox.SetValue(hide_on_open)
+
+        check_updates = self.config.get('General', {}).get('check_for_updates', 'True')
+        check_updates = check_updates.lower() == 'true'
+        self.check_updates_checkbox.SetValue(check_updates)
+
     def save_settings(self):
         self.config['General']['minimize_on_close'] = self.minimize_checkbox.GetValue()
+        self.config['General']['hide_on_open'] = self.hide_main_window_checkbox.GetValue()
+        self.config['General']['check_for_updates'] = self.check_updates_checkbox.GetValue()
 
     def on_setting_change(self, event):
         self.save_settings() # Save the settings when any option is changed.

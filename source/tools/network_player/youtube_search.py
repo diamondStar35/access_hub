@@ -3,6 +3,8 @@ from tools.network_player.youtube_player import YoutubePlayer, EVT_VLC_READY
 from tools.network_player.download_dialog import DownloadDialog
 from youtubesearchpython import VideosSearch
 from speech import speak
+from configobj import ConfigObj
+import app_vars
 import yt_dlp
 import threading
 from wx.lib.newevent import NewEvent
@@ -84,6 +86,7 @@ class YoutubeSearchResults(wx.Frame):
         self.search_instance = search_instance
         self.loading_more = False
         self.no_more_results = False
+        self.load_settings()
 
         panel = wx.Panel(self)
         vbox = wx.BoxSizer(wx.VERTICAL)
@@ -127,6 +130,13 @@ class YoutubeSearchResults(wx.Frame):
             item_text = f"{title} , Duration: {duration}, By: {uploader}"
             self.results_listbox.Append(item_text)
             self.results.append(result)
+
+    def load_settings(self):
+        """Loads settings from the config file."""
+        config_path = os.path.join(wx.StandardPaths.Get().GetUserConfigDir(), app_vars.app_name, "settings.ini")
+        self.config = ConfigObj(config_path)
+        youtube_settings = self.config.get('YouTube', {})
+        self.default_quality = youtube_settings.get('video_quality', 'Medium')
 
     def loadMoreVideos(self):
         self.loading_more = True
@@ -220,11 +230,23 @@ class YoutubeSearchResults(wx.Frame):
             else:
                 wx.CallAfter(self.show_loading_dialog, title)
             wx.CallAfter(self.Hide)
+
             ydl_opts = {
-                'format': 'bestaudio/best' if play_as_audio else 'best[ext=mp4]/best',
                 'quiet': True,
                 'noplaylist': True,
             }
+            if play_as_audio:
+                ydl_opts['format'] = 'bestaudio/best'
+            else:
+                if self.default_quality == "Low":
+                    ydl_opts['format'] = 'worst[height<=480]'
+                elif self.default_quality == "Medium":
+                    ydl_opts['format'] = 'best[height<=720]'
+                elif self.default_quality == "Best":
+                    ydl_opts['format'] = 'best[ext=mp4]/best'
+                else:  # Fallback to medium if something goes wrong
+                    ydl_opts['format'] = 'best[height<=720]'
+
             with yt_dlp.YoutubeDL(ydl_opts) as ydl:
                 info_dict = ydl.extract_info(url, download=False)
                 media_url = info_dict.get('url', None)
@@ -371,5 +393,5 @@ class YoutubeSearchResults(wx.Frame):
 
     def onClose(self, event):
         if self.parent:
-            self.parent.Show()
+            wx.CallAfter(self.parent.Show)
         self.Destroy()

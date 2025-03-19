@@ -2,7 +2,7 @@ import wx
 import concurrent.futures
 import speedtest
 
-class SpeedTest(wx.Frame):
+class SpeedTest(wx.Dialog):
     def __init__(self, parent, title):
         super().__init__(parent, title=title, size=(400, 300))
         self.parent = parent
