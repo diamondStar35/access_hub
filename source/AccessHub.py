@@ -323,7 +323,7 @@ class AccessTaskBarIcon(wx.adv.TaskBarIcon):
     def __init__(self, frame):
         super(AccessTaskBarIcon, self).__init__()
         self.frame = frame
-        icon = wx.Icon("icon.ico")
+        icon = wx.Icon("app_vars.icon")
         self.SetIcon(icon, "Access Hub") # Tooltip
         self.Bind(wx.adv.EVT_TASKBAR_LEFT_DOWN, self.on_left_down) # Restore on left click
 
