@@ -8,7 +8,7 @@ The app may not be ready for public use, It is for beta testing for now. Though 
 
 Some features are not yet well-designed due to some reasons.
 
-There are, of course, some undescovered bugs I might not know about them. Please help by testing the app and leave your feedback by contacting me, Find contact info section below.
+There are, of course, some undiscovered bugs I might not know about them. Please help by testing the app and leave your feedback by contacting me, Find contact info section below.
 
 # What does this have?
 
@@ -80,5 +80,11 @@ Please note that it automatically detects and uses your keyboard language, There
 ## Contact me
 
 Please help me by reporting bugs and leaving your feedback thrugh the following ways:
+
+[Telegram: Diamond Star](https://t.me/diamondStar35)
+
+[WhatsApp](https://wa.me/201067573360)
+
+[Email](mailto:ramymaherali55@gmail.com)
 
 You can always get my contact info thrugh the main menu of the app, By pressing alt and choosing contact us. Choose the appropriate method that works well for you.
