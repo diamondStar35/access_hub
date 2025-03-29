@@ -1,11 +1,11 @@
 import wx
-from tools.network_player.youtube_player import YoutubePlayer, EVT_VLC_READY
-from tools.network_player.download_dialog import DownloadDialog
+from .youtube_player import YoutubePlayer, EVT_VLC_READY
+from .download_dialog import DownloadDialog
+from .utils import run_yt_dlp_json
 from youtubesearchpython import VideosSearch
 from speech import speak
 from configobj import ConfigObj
 import app_vars
-import yt_dlp
 import threading
 from wx.lib.newevent import NewEvent
 import os
@@ -193,29 +193,41 @@ class YoutubeSearchResults(wx.Frame):
         try:
             wx.CallAfter(self.show_loading_dialog, title)
             wx.CallAfter(self.Hide)
-            ydl_opts = {
-                'quiet': True,
-                'noplaylist': True,
-            }
 
+            format_selector = None
             if quality == "low":
-                ydl_opts['format'] = 'worst[height<=480]'
+                # Try worst MP4 first, then worst video MP4, then absolute worst combined
+                format_selector = 'worst[ext=mp4]/worstvideo[ext=mp4]/worst'
             elif quality == "medium":
-                ydl_opts['format'] = 'best[height<=720]'
+                 # Try best combined MP4 <=720p, then best video MP4 <=720p, then best combined <=720p
+                format_selector = 'best[height<=?720][ext=mp4]/bestvideo[height<=?720][ext=mp4]/best[height<=?720]'
             elif quality == "best":
-                ydl_opts['format'] = 'best[ext=mp4]/best'
+                 # Try best combined MP4, then best video MP4, then best combined overall
+                format_selector = 'best[ext=mp4]/bestvideo[ext=mp4]/best'
 
-            with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-                info_dict = ydl.extract_info(url, download=False)
-                media_url = info_dict.get('url', None)
-                if not media_url:
-                    raise ValueError(f"No playable URL found for {quality} quality.")
+            info_dict = run_yt_dlp_json(url, format_selector=format_selector)
+            if not info_dict:
+                raise ValueError("Failed to get video info from yt-dlp.")
 
-                wx.CallAfter(self.create_and_show_player, title, media_url, info_dict['description'], url)
+            media_url = info_dict.get('url')
+            description = info_dict.get('description', '') # Get description from JSON
+
+            if not media_url:
+                # Fallback: Check 'formats' list if top-level 'url' isn't populated (less common with -f)
+                formats = info_dict.get('formats', [])
+                if formats:
+                    media_url = formats[0].get('url') # Assume the first format is the chosen one
+
+            if not media_url:
+                print("Could not find media URL in yt-dlp JSON output.")
+                raise ValueError("No playable URL found in yt-dlp output.")
+
+            wx.CallAfter(self.create_and_show_player, title, media_url, description, url)
+
         except Exception as e:
             wx.CallAfter(self.destroy_loading_dialog)
             wx.CallAfter(wx.MessageBox, f"Could not play: {e}", "Error", wx.OK | wx.ICON_ERROR)
-            wx.CallAfter(self.Show)
+            wx.CallAfter(self.Show) # Show the results window again on failure
 
     def onPlay(self, event, play_as_audio=False):
         selection = self.results_listbox.GetSelection()
@@ -225,39 +237,43 @@ class YoutubeSearchResults(wx.Frame):
 
     def get_direct_link_and_play(self, url, title, play_as_audio):
         try:
-            if play_as_audio:
-                wx.CallAfter(self.show_loading_dialog, title, True)
-            else:
-                wx.CallAfter(self.show_loading_dialog, title)
+            wx.CallAfter(self.show_loading_dialog, title, play_as_audio)
             wx.CallAfter(self.Hide)
 
-            ydl_opts = {
-                'quiet': True,
-                'noplaylist': True,
-            }
+            format_selector = None
             if play_as_audio:
-                ydl_opts['format'] = 'bestaudio/best'
+                format_selector = 'ba/b'
             else:
                 if self.default_quality == "Low":
-                    ydl_opts['format'] = 'worst[height<=480]'
+                    format_selector = 'worst[ext=mp4]/worstvideo[ext=mp4]/worst'
                 elif self.default_quality == "Medium":
-                    ydl_opts['format'] = 'best[height<=720]'
+                    format_selector = 'best[height<=?720][ext=mp4]/bestvideo[height<=?720][ext=mp4]/best[height<=?720]'
                 elif self.default_quality == "Best":
-                    ydl_opts['format'] = 'best[ext=mp4]/best'
-                else:  # Fallback to medium if something goes wrong
-                    ydl_opts['format'] = 'best[height<=720]'
+                    format_selector = 'best[ext=mp4]/bestvideo[ext=mp4]/best'
+                else:
+                    format_selector = 'best[height<=?720][ext=mp4]/bestvideo[height<=?720][ext=mp4]/best[height<=?720]'
 
-            with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-                info_dict = ydl.extract_info(url, download=False)
-                media_url = info_dict.get('url', None)
-                if not media_url:
-                    raise ValueError("No playable video URL found.")
+            info_dict = run_yt_dlp_json(url, format_selector=format_selector)
+            if not info_dict:
+                raise ValueError("Failed to get video info from yt-dlp.")
 
-                wx.CallAfter(self.create_and_show_player, title, media_url, info_dict['description'], url)
+            media_url = info_dict.get('url')
+            description = info_dict.get('description', '') # Get description from JSON
+
+            if not media_url:
+                formats = info_dict.get('formats', [])
+                if formats:
+                    media_url = formats[0].get('url')
+            if not media_url:
+                print("Could not find media URL in yt-dlp JSON output.")
+                raise ValueError("No playable URL found in yt-dlp output.")
+
+            wx.CallAfter(self.create_and_show_player, title, media_url, description, url)
+
         except Exception as e:
             wx.CallAfter(self.destroy_loading_dialog)
             wx.CallAfter(wx.MessageBox, f"Could not play video: {e}", "Error", wx.OK | wx.ICON_ERROR)
-            wx.CallAfter(self.Show)
+            wx.CallAfter(self.Show) # Show the results window again on failure
 
     def create_and_show_player(self, title, url, description, original_youtube_link):
         self.player = YoutubePlayer(None, title, url, self, description, original_youtube_link, self.results, self.results_listbox.GetSelection())

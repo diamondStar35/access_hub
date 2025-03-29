@@ -1,12 +1,11 @@
 import wx
 from wx.lib.newevent import NewEvent
-import yt_dlp
 from youtube_comment_downloader.downloader import YoutubeCommentDownloader, SORT_BY_POPULAR
 import app_vars
 from gui.custom_controls import CustomButton
-from tools.network_player.comments import CommentsDialog
-from tools.network_player.download_dialog import DownloadDialog
-from tools.network_player.subtitle_manager import SubtitleManager
+from .comments import CommentsDialog
+from .download_dialog import DownloadDialog
+from .subtitle_manager import SubtitleManager
 from speech import speak
 import vlc
 import sys
@@ -379,30 +378,50 @@ class YoutubePlayer(wx.Frame):
             self.player = None
         threading.Thread(target=self.get_direct_link_and_play, args=(selected_video['link'], selected_video['title'], False)).start()
 
-    def get_direct_link_and_play(self, url, title, play_as_audio):
-        #This function was copyed from the youtube_search.py file, Because it is doing exactly what we need
+    def get_direct_link_and_play(self, url, title, play_as_audio=False):
+        # This function is called when navigating next/previous
         try:
             self.youtube_url = url
             self.title = title
-            ydl_opts = {
-                'format': 'bestaudio/best' if play_as_audio else 'best[ext=mp4]/best',
-                'quiet': True,
-                'noplaylist': True,
-            }
-            with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-                info_dict = ydl.extract_info(url, download=False)
-                media_url = info_dict.get('url', None)
-                self.description = info_dict['description']
-                if not media_url:
-                    raise ValueError("No playable video URL found.")
+            self.SetTitle(title)
 
-                self.url = media_url
-                self.is_audio = url.endswith("m4a")
-                self.init_vlc_thread()
-                self.SetTitle(title)
+            format_selector = None
+            if self.is_audio:
+                 format_selector = 'ba/b'
+            else:
+                if self.default_quality == "Low":
+                    format_selector = 'worst[ext=mp4]/worstvideo[ext=mp4]/worst'
+                elif self.default_quality == "Medium":
+                    format_selector = 'best[height<=?720][ext=mp4]/bestvideo[height<=?720][ext=mp4]/best[height<=?720]'
+                elif self.default_quality == "Best":
+                    format_selector = 'best[ext=mp4]/bestvideo[ext=mp4]/best'
+                else:
+                    format_selector = 'best[height<=?720][ext=mp4]/bestvideo[height<=?720][ext=mp4]/best[height<=?720]'
+
+            wx.CallAfter(speak, f"Loading {title}...")
+            wx.CallAfter(wx.BeginBusyCursor)
+
+            info_dict = run_yt_dlp_json(url, format_selector=format_selector)
+            if not info_dict:
+                 raise ValueError("Failed to get video info from yt-dlp.")
+
+            media_url = info_dict.get('url')
+            self.description = info_dict.get('description', '')
+
+            if not media_url:
+                formats = info_dict.get('formats', [])
+                if formats:
+                    media_url = formats[0].get('url')
+            if not media_url:
+                print("Could not find media URL in yt-dlp JSON output for next/prev.")
+                raise ValueError("No playable URL found in yt-dlp output for next/prev.")
+
+            self.url = media_url
+            wx.CallAfter(wx.EndBusyCursor)
+            self.init_vlc_thread()
         except Exception as e:
-            wx.CallAfter(wx.MessageBox, f"Could not play video: {e}", "Error", wx.OK | wx.ICON_ERROR)
-            wx.CallAfter(self.Show)
+            wx.CallAfter(wx.EndBusyCursor)
+            wx.CallAfter(wx.MessageBox, f"Could not play next/previous video: {e}", "Error", wx.OK | wx.ICON_ERROR)
 
     def _format_time(self, milliseconds):
         if milliseconds is None or milliseconds == 0:

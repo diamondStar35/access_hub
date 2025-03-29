@@ -1,6 +1,6 @@
 import wx
-import yt_dlp
-from tools.network_player.youtube_player import YoutubePlayer
+from .youtube_player import YoutubePlayer
+from .utils import run_yt_dlp_json
 from speech import speak
 import concurrent.futures
 
@@ -81,24 +81,32 @@ class YoutubeStreamer(wx.Dialog):
         self.Destroy()
 
     def extract_and_play(self, url, play_as_audio, quality):
-        """Extracts the direct stream URL and title using yt_dlp."""
+        """Extracts the direct stream URL and title using yt-dlp.exe."""
         try:
-            ydl_opts = {
-                'quiet': True,
-                'noplaylist': True,
-                'format': self.get_format_string(play_as_audio, quality)
-            }
-            with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-                info_dict = ydl.extract_info(url, download=False)
-                media_url = info_dict.get('url', None)
-                title = info_dict.get('title', "")
-                description = info_dict.get('description', "")
-                if not media_url:
-                    raise ValueError("No playable URL found.")
+            format_selector = self.get_format_string(play_as_audio, quality)
 
-                return media_url, title, description
+            info_dict = run_yt_dlp_json(url, format_selector=format_selector)
+            if not info_dict:
+                return None
+
+            media_url = info_dict.get('url', None)
+            title = info_dict.get('title', "Untitled")
+            description = info_dict.get('description', "")
+
+            # Fallback check: Sometimes the direct URL is in the 'formats' list
+            if not media_url:
+                formats = info_dict.get('formats', [])
+                if formats:
+                    media_url = formats[0].get('url')
+            if not media_url:
+                 print(f"Error: No playable URL found in yt-dlp output for URL: {url} with format: {format_selector}")
+                 wx.CallAfter(wx.MessageBox, f"Could not find a playable stream URL for the selected format ({quality}).", "Extraction Error", wx.OK | wx.ICON_ERROR)
+                 return None
+
+            return media_url, title, description
         except Exception as e:
-            print(f"Error during extraction: {e}")
+            print(f"Error during extraction process: {e}")
+            wx.CallAfter(wx.MessageBox, f"An unexpected error occurred during extraction: {e}", "Error", wx.OK | wx.ICON_ERROR)
             return None
 
     def get_format_string(self, play_as_audio, quality):

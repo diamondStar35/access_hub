@@ -3,6 +3,7 @@ import asyncio
 import threading
 from msspeech import MSSpeech, MSSpeechError
 from tools.online_tts.batch_processor import OnlineTTSBatch
+from gui.custom_controls import CustomSlider
 import os
 import time
 from langdetect import detect, LangDetectException
@@ -106,7 +107,7 @@ class OnlineTTS(wx.Frame):
         label.SetForegroundColour(wx.Colour(50, 50, 50))
         hbox.Add(label, 0, wx.RIGHT | wx.ALIGN_CENTER_VERTICAL, 8)
 
-        slider = wx.Slider(parent, value=default_val, minValue=min_val, maxValue=max_val)
+        slider = CustomSlider(parent, value=default_val, minValue=min_val, maxValue=max_val)
         hbox.Add(slider, 1)
         return slider, hbox
 

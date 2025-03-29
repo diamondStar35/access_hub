@@ -1,6 +1,7 @@
 import wx
 import os
-import yt_dlp
+import sys
+from .utils import run_yt_dlp_json
 from speech import speak
 import app_vars
 import concurrent.futures
@@ -15,8 +16,18 @@ class SubtitleManager:
         self.subtitle_filename = None
         self.executor = concurrent.futures.ThreadPoolExecutor(max_workers=2)
         # Get the project root and ffmpeg path
-        project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-        self.ffmpeg_path = os.path.join(project_root, 'ffmpeg.exe')
+        if getattr(sys, 'frozen', False):
+             project_root = os.path.dirname(sys.executable)
+        else:
+             project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+        self.ffmpeg_dir = project_root
+        self.yt_dlp_exe_path = os.path.join(project_root, 'yt-dlp.exe')
+
+        # Verify ffmpeg.exe exists in the expected directory for clarity
+        ffmpeg_exe_check = os.path.join(self.ffmpeg_dir, 'ffmpeg.exe')
+        if not os.path.exists(ffmpeg_exe_check):
+             print(f"Warning: ffmpeg.exe not found in the expected directory: {self.ffmpeg_dir}")
+
 
     def download_subtitles(self):
         """Starts the subtitle download process."""
@@ -43,37 +54,55 @@ class SubtitleManager:
                     print(f"Error deleting file {file_path}: {e}")
 
     def fetch_subtitles(self):
-        """Fetches available subtitles using yt-dlp."""
-        ydl_opts = {
-            'quiet': True,
-            'writesubtitles': True,
-            'skip_download': True,
-            'listsubtitles': True,
-        }
-
+        """Fetches available subtitles, listing manual first, then unique automatic ones."""
         try:
-            with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-                info_dict = ydl.extract_info(self.youtube_url, download=False)
+            info_dict = run_yt_dlp_json(self.youtube_url, extra_args=['--write-subs', '--write-auto-subs'])
+            if not info_dict:
+                wx.CallAfter(self.loading_dialog.Destroy)
+                return
 
-                if not info_dict:
-                    raise Exception("Could not fetch video information.")
+            subtitles = info_dict.get('subtitles', {})
+            automatic_captions = info_dict.get('automatic_captions', {})
 
-                subtitles = info_dict.get('subtitles', {})
-                automatic_captions = info_dict.get('automatic_captions', {})
-                self.subtitles_info = {**automatic_captions, **subtitles}
+            manual_subs_data = []
+            auto_subs_data = []
+            manual_codes = set()
 
-                if not self.subtitles_info:
-                    wx.CallAfter(self.loading_dialog.Destroy)
-                    wx.CallAfter(speak, "No subtitles found for this video.")
-                    return
+            # Process manual subtitles first
+            for lang_code, subs_list in subtitles.items():
+                if subs_list:
+                    lang_name = subs_list[0].get('name', lang_code)
+                    display_name = f"{lang_name} ({lang_code})" # No marker
+                    manual_subs_data.append((lang_code, display_name))
+                    manual_codes.add(lang_code)
 
-                self.lang_code_name_map = {}
-                for lang_code, sub_info in self.subtitles_info.items():
-                    lang_name = sub_info[0].get('name', lang_code)
-                    self.lang_code_name_map[lang_code] = lang_name
+            # Process automatic captions, adding only if the language code wasn't in manual subs
+            for lang_code, subs_list in automatic_captions.items():
+                if subs_list and lang_code not in manual_codes:
+                    lang_name = subs_list[0].get('name', lang_code)
+                    display_name = f"{lang_name} ({lang_code})"
+                    auto_subs_data.append((lang_code, display_name))
 
-                dialog_data = [f"{name} ({code})" for code, name in self.lang_code_name_map.items()]
-                wx.CallAfter(self.show_language_selection_dialog, dialog_data)
+            # Sort each list alphabetically by display name
+            manual_subs_data.sort(key=lambda item: item[1])
+            auto_subs_data.sort(key=lambda item: item[1])
+
+            # Combine the sorted lists: manual first, then auto
+            combined_data = manual_subs_data + auto_subs_data
+            if not combined_data:
+                wx.CallAfter(self.loading_dialog.Destroy)
+                wx.CallAfter(speak, "No subtitles found for this video.")
+                return
+
+            # Extract final lists for dialog and lookup based on the combined, sorted order
+            self.sorted_lang_codes = [code for code, name in combined_data]
+            dialog_data = [name for code, name in combined_data]
+            if not dialog_data:
+                 wx.CallAfter(self.loading_dialog.Destroy)
+                 wx.CallAfter(speak, "No valid subtitle languages found to display.")
+                 return
+
+            wx.CallAfter(self.show_language_selection_dialog, dialog_data)
         except Exception as e:
             wx.CallAfter(self.loading_dialog.Destroy)
             wx.CallAfter(speak, f"Error fetching subtitles: {e}")
@@ -91,80 +120,82 @@ class SubtitleManager:
 
         if dialog.ShowModal() == wx.ID_OK:
             selected_index = dialog.GetSelection()
-            self.selected_language = list(self.lang_code_name_map.keys())[selected_index]
+            self.selected_language = self.sorted_lang_codes[selected_index]
             self.executor.submit(self.download_selected_subtitle)
         dialog.Destroy()
 
     def download_selected_subtitle(self):
-        """Downloads the selected subtitle to the 'subtitles' folder in the config directory."""
+        """Downloads the selected subtitle as SRT using yt-dlp.exe."""
         if not self.selected_language:
             return
 
-        wx.CallAfter(self.create_progress_dialog)
+        wx.CallAfter(self.create_progress_dialog) # Show progress dialog
+
         config_dir = wx.StandardPaths.Get().GetUserConfigDir()
         subtitles_dir = os.path.join(config_dir, app_vars.app_name, "subtitles")
         os.makedirs(subtitles_dir, exist_ok=True)
-        # Define the output template for subtitle download
-        subtitle_output_template = os.path.join(subtitles_dir, 'subtitle.%(ext)s')
 
-        ydl_opts = {
-            'quiet': True,
-            'writeautomaticsub': True,
-            'writesubtitles': True,
-            'skip_download': True,
-            'subtitleslangs': [self.selected_language],
-            'subtitlesformat': 'best',
-            'outtmpl': subtitle_output_template,
-            'no_warnings': True,
-        }
+        # Define the *exact* output path and filename for SRT
+        # Using -o ensures the filename, -P sets the directory
+        srt_output_path = os.path.join(subtitles_dir, 'subtitle.srt')
+        # Use -P for path, -o for filename template (without extension)
+        output_template = os.path.join(subtitles_dir, 'subtitle') # yt-dlp adds .lang.ext
+
+
+        command = [
+            self.yt_dlp_exe_path,
+            '--no-warnings',
+            '--sub-format', 'best',
+            '--write-subs',
+            '--write-auto-subs',
+            '--sub-langs', self.selected_language,
+            '--convert-subs', 'srt',
+            '--skip-download',
+            '--ffmpeg-location', self.ffmpeg_dir,
+            '-P', subtitles_dir,
+             '-o', 'subtitle.%(ext)s',
+            self.youtube_url
+        ]
 
         try:
-            with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-                info_dict = ydl.extract_info(self.youtube_url, download=False)
-                ydl.process_info(info_dict)
+            startupinfo = subprocess.STARTUPINFO()
+            startupinfo.dwFlags |= subprocess.STARTF_USESHOWWINDOW
+            startupinfo.wShowWindow = subprocess.SW_HIDE
 
-                # Find the downloaded subtitle file
-            for filename in os.listdir(subtitles_dir):
-                if filename.startswith("subtitle") and filename.endswith(".vtt"):
-                    self.subtitle_filename = filename
-                    break
+            process = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, encoding='utf-8', startupinfo=startupinfo)
+            stdout, stderr = process.communicate(timeout=120) # Add timeout
+            if process.returncode == 0:
+                 expected_srt_filename = f'subtitle.{self.selected_language}.srt'
+                 expected_srt_path = os.path.join(subtitles_dir, expected_srt_filename)
+                 final_srt_path = os.path.join(subtitles_dir, 'subtitle.srt')
 
-            if self.subtitle_filename:
-                wx.CallAfter(speak, "Subtitle downloaded successfully. Converting...")
-                self.convert_to_srt(subtitles_dir)
+                 if os.path.exists(expected_srt_path):
+                     try:
+                         if os.path.exists(final_srt_path):
+                             os.remove(final_srt_path)
+                         os.rename(expected_srt_path, final_srt_path)
+                         self.subtitle_filename = "subtitle.srt"
+                         wx.CallAfter(speak, "Subtitle downloaded successfully.")
+                     except OSError as rename_err:
+                         wx.CallAfter(speak, "Subtitle downloaded, but failed to rename.")
+                         self.subtitle_filename = expected_srt_filename
+                 else:
+                     # This case is less likely if returncode is 0, but check anyway
+                     print(f"yt-dlp finished successfully, but expected subtitle file not found: {expected_srt_path}")
+                     print(f"stdout: {stdout}")
+                     print(f"stderr: {stderr}")
+                     wx.CallAfter(speak, "Subtitle download finished, but the file could not be located.")
+                     self.subtitle_filename = None
             else:
-                wx.CallAfter(self.loading_dialog.Destroy)
-                wx.CallAfter(speak, "Subtitle download may have failed. Check the subtitles folder.")
-
-        except yt_dlp.utils.DownloadError as e:
-            wx.CallAfter(self.loading_dialog.Destroy)
-            wx.CallAfter(speak, f"Download error: {e}")
+                wx.CallAfter(speak, f"Error downloading subtitle: yt-dlp failed. Check logs for details.")
+                self.subtitle_filename = None
+        except subprocess.TimeoutExpired:
+            process.kill()
+            wx.CallAfter(speak, "Subtitle download timed out.")
+            self.subtitle_filename = None
         except Exception as e:
-            wx.CallAfter(self.loading_dialog.Destroy)
             wx.CallAfter(speak, f"Error downloading subtitle: {e}")
-
-    def convert_to_srt(self, subtitles_dir):
-        """Converts the downloaded VTT subtitle to SRT format using FFmpeg."""
-        vtt_subtitle_path = os.path.join(subtitles_dir, self.subtitle_filename)
-        srt_subtitle_path = os.path.join(subtitles_dir, "subtitle.srt")
-
-        try:
-            subprocess.run([
-                self.ffmpeg_path,
-                "-i",
-                vtt_subtitle_path,
-                srt_subtitle_path
-            ], check=True, capture_output=True)
-
-            # Delete the original VTT file
-            os.remove(vtt_subtitle_path)
-            self.subtitle_filename = "subtitle.srt"
-            wx.CallAfter(speak, "Subtitle converted successfully.")
-
-        except subprocess.CalledProcessError as e:
-            wx.CallAfter(speak, f"Error converting subtitle to SRT: {e}")
-        except Exception as e:
-            wx.CallAfter(speak, f"An unexpected error occurred during conversion: {e}")
+            self.subtitle_filename = None
         finally:
             wx.CallAfter(self.loading_dialog.Destroy)
 
