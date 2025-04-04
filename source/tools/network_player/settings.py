@@ -30,12 +30,21 @@ class YoutubeSettings(SettingsPanel):
         self.sizer.Add(self.quality_combo, 0, wx.ALL | wx.EXPAND, 5)
         self.quality_combo.Bind(wx.EVT_COMBOBOX, self.on_setting_change)
 
+        update_channel_label = wx.StaticText(self, label="yt-dlp Update Channel:")
+        self.update_channel_combo = wx.ComboBox(self, choices=["stable", "nightly", "master"], style=wx.CB_READONLY)
+        self.update_channel_combo.SetValue("stable") # Default value
+        self.sizer.Add(update_channel_label, 0, wx.ALL, 5)
+        self.sizer.Add(self.update_channel_combo, 0, wx.ALL | wx.EXPAND, 5)
+        self.update_channel_combo.Bind(wx.EVT_COMBOBOX, self.on_setting_change)
+
+
     def load_settings(self):
         youtube_settings = self.config.get('YouTube', {})
         self.fast_forward_spin.SetValue(int(youtube_settings.get('fast_forward_interval', 5)))
         self.rewind_spin.SetValue(int(youtube_settings.get('rewind_interval', 5)))
         self.volume_spin.SetValue(int(youtube_settings.get('default_volume', 80)))
         self.quality_combo.SetValue(youtube_settings.get('video_quality', "Medium"))
+        self.update_channel_combo.SetValue(youtube_settings.get('yt_dlp_update_channel', "stable"))
 
     def save_settings(self):
         if 'YouTube' not in self.config:
@@ -44,6 +53,7 @@ class YoutubeSettings(SettingsPanel):
         self.config['YouTube']['rewind_interval'] = self.rewind_spin.GetValue()
         self.config['YouTube']['default_volume'] = self.volume_spin.GetValue()
         self.config['YouTube']['video_quality'] = self.quality_combo.GetValue()
+        self.config['YouTube']['yt_dlp_update_channel'] = self.update_channel_combo.GetValue()
 
     def on_setting_change(self, event):
         self.save_settings()

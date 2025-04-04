@@ -1,7 +1,7 @@
 import wx
 import wx.adv
-import os
-import sys
+import wx.lib.newevent
+import os, sys, subprocess, re
 import shutil
 import webbrowser
 import app_vars
@@ -142,6 +142,15 @@ class AccessHub(wx.Frame):
         app_menu = wx.Menu()
         settings_item = app_menu.Append(wx.ID_ANY, "&Settings", "Open the settings dialog")
         self.Bind(wx.EVT_MENU, self.on_settings, settings_item)
+
+        updates_menu = wx.Menu()
+        check_app_update_item = updates_menu.Append(wx.ID_ANY, "Check for &App Updates", "Check for updates to Access Hub")
+        self.Bind(wx.EVT_MENU, lambda event: self.check_for_updates(silent_no_update=False), check_app_update_item)
+
+        check_yt_dlp_update_item = updates_menu.Append(wx.ID_ANY, "Check for &yt-dlp Update", "Check for updates to yt-dlp")
+        self.Bind(wx.EVT_MENU, self.on_check_yt_dlp_update, check_yt_dlp_update_item)
+        app_menu.AppendSubMenu(updates_menu, "&Updates")
+
         quit_item = app_menu.Append(wx.ID_EXIT, "&Quit", "Quit the application")
         self.Bind(wx.EVT_MENU, self.on_quit, quit_item)
 
@@ -229,7 +238,80 @@ class AccessHub(wx.Frame):
             keyboard.write(char)
             time.sleep(0.05)
 
-    def check_for_updates(self):
+    def get_yt_dlp_path(self):
+        """Finds the path to yt-dlp.exe, checking multiple locations."""
+        # Check next to script/executable first
+        if getattr(sys, 'frozen', False):
+            base_dir = sys._MEIPASS
+        else:
+            base_dir = os.path.dirname(os.path.abspath(__file__))
+        yt_dlp_exe_path = os.path.join(base_dir, 'yt-dlp.exe')
+        if os.path.exists(yt_dlp_exe_path):
+            return yt_dlp_exe_path
+
+        # Check in AppData/Local (where yt-dlp --update might place it)
+        appdata_local = os.getenv('LOCALAPPDATA')
+        if appdata_local:
+            alt_path = os.path.join(appdata_local, 'yt-dlp', 'yt-dlp.exe')
+            if os.path.exists(alt_path):
+                return alt_path
+
+        # Check if it's in the system PATH
+        path_exe = shutil.which('yt-dlp.exe')
+        if path_exe:
+            print("Info: yt-dlp.exe found in system PATH.")
+            return path_exe
+        return None
+
+    def run_yt_dlp_command(self, args, timeout=120): # Default timeout
+        """Runs a yt-dlp command with a timeout and returns output."""
+        yt_dlp_path = self.get_yt_dlp_path()
+        if not yt_dlp_path:
+            return -3, "", "yt-dlp.exe not found." # Specific code for not found
+
+        command = [yt_dlp_path] + args
+        process = None
+        try:
+            startupinfo = subprocess.STARTUPINFO()
+            startupinfo.dwFlags |= subprocess.STARTF_USESHOWWINDOW
+            startupinfo.wShowWindow = subprocess.SW_HIDE
+
+            process = subprocess.Popen(
+                command,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                text=True,
+                encoding='utf-8',
+                errors='replace',
+                startupinfo=startupinfo
+            )
+            stdout, stderr = process.communicate(timeout=timeout)
+            return process.returncode, stdout, stderr
+        except FileNotFoundError:
+            # Should be caught by get_yt_dlp_path, but handle defensively
+            return -3, "", f"Error: Command not found - {yt_dlp_path}"
+        except subprocess.TimeoutExpired:
+            if process:
+                process.kill()
+                try:
+                    # Attempt to grab final output after kill
+                    stdout, stderr = process.communicate(timeout=5)
+                except Exception:
+                    stdout, stderr = "", ""
+            else:
+                stdout, stderr = "", ""
+            # Return specific timeout code
+            return -2, stdout, f"yt-dlp command timed out after {timeout} seconds.\n{stderr}"
+        except Exception as e:
+            stdout, stderr = "", ""
+            if process:
+                try:
+                    stdout, stderr = process.communicate(timeout=5)
+                except Exception:
+                    pass
+            return -1, stdout, f"An unexpected error occurred running yt-dlp: {e}\n{stderr}"
+
+    def check_for_updates(self, silent_no_update=True):
         """Initiates the update check."""
         server_url = "http://raw.githubusercontent.com/diamondStar35/access_hub/main"
         # Get the AppData directory
@@ -243,7 +325,172 @@ class AccessHub(wx.Frame):
                 print(f"Error removing 'updates' folder: {e}")
 
         updater = Updater(server_url, app_vars.app_version)
-        self.executor.submit(updater.check_for_updates)
+        self.executor.submit(updater.check_for_updates, silent_no_update)
+
+    def on_check_yt_dlp_update(self, event):
+        yt_dlp_path = self.get_yt_dlp_path()
+        if not yt_dlp_path:
+            wx.MessageBox(
+                f"yt-dlp.exe could not be found in the application directory.",
+                "yt-dlp Not Found", wx.OK | wx.ICON_ERROR
+            )
+            return
+
+        # Check if yt-dlp.exe is writable
+        if not os.access(yt_dlp_path, os.W_OK):
+             wx.MessageBox(
+                f"Cannot write to yt-dlp.exe located at:\n{yt_dlp_path}\n\n"
+                "The application may not have permission to update it. "
+                "Try running Access Hub as administrator if you want to update.",
+                "Permission Error", wx.OK | wx.ICON_WARNING, parent=self
+             )
+             return
+
+        self.config = self.settings_dialog.load_config()
+        channel = self.config.get('YouTube', {}).get('yt_dlp_update_channel', 'stable')
+
+        update_dialog = wx.ProgressDialog(
+            "Updating yt-dlp",
+            f"Preparing update check for '{channel}' channel...",
+            maximum=100, # Will just pulse
+            parent=self,
+            style=wx.PD_APP_MODAL | wx.PD_AUTO_HIDE | wx.PD_CAN_ABORT | wx.PD_ELAPSED_TIME
+        )
+        update_dialog.Show() # Show it immediately
+        wx.Yield()
+
+        update_thread = threading.Thread(target=self._perform_yt_dlp_update_action,
+                                         args=(channel, update_dialog),
+                                         daemon=True)
+        update_thread.start()
+
+    def _perform_yt_dlp_update_action(self, channel, update_dialog):
+        """Worker function to run yt-dlp update commands."""
+        initial_version = "Unknown"
+        cancelled = False
+
+        def safely_destroy_dialog(dialog):
+            """Helper to destroy dialog safely from worker thread."""
+            if dialog and dialog.IsShown():
+                try:
+                    dialog.Destroy()
+                except (wx.wxAssertionError, RuntimeError) as err:
+                    print(f"Ignoring error destroying progress dialog: {err}")
+
+        try:
+            # Check if cancelled before starting
+            if update_dialog.WasCancelled():
+                 print("yt-dlp update cancelled before starting.")
+                 cancelled = True
+                 final_code, final_out, final_err = -10, "", "Update cancelled by user."
+                 return
+
+            wx.CallAfter(update_dialog.Pulse, "Checking current yt-dlp version...")
+            speak("Checking current yt-dlp version...")
+            code_curr, out_curr, err_curr = self.run_yt_dlp_command(['--version'])
+            if cancelled or update_dialog.WasCancelled(): return
+
+            if code_curr == 0 and out_curr.strip():
+                initial_version = out_curr.strip()
+                display_version = initial_version
+                if '@' in display_version:
+                    parts = display_version.split('@')
+                    if len(parts) > 1:
+                        display_version = f"{parts[0]}@{parts[1][:15]}" # e.g., nightly@2025.03.31.2143
+                wx.CallAfter(update_dialog.Pulse, f"Current: {display_version}. Fetching update info for '{channel}'...")
+                speak(f"Current version: {display_version}. Initiating update...")
+            elif code_curr == -2:
+                wx.CallAfter(update_dialog.Pulse, f"Timeout getting current version. Proceeding with update check for '{channel}'...")
+                print(f"yt-dlp version check timed out. Error: {err_curr}")
+            elif code_curr == -3:
+                # yt-dlp not found - show result and exit thread
+                wx.CallAfter(self._show_yt_dlp_update_final_result, code_curr, out_curr, err_curr, initial_version, channel)
+                return
+            else:
+                wx.CallAfter(update_dialog.Pulse, f"Could not get current version (Code: {code_curr}). Attempting update to '{channel}' anyway...")
+                print(f"yt-dlp version check failed. Stderr: {err_curr}, Stdout: {out_curr}")
+
+            if cancelled or update_dialog.WasCancelled():
+                cancelled = True
+                final_code, final_out, final_err = -10, "", "Update cancelled by user."
+                return
+
+            wx.CallAfter(update_dialog.Pulse, f"Running update process to channel (channel: {channel}). This may take some time...")
+            update_command = ['--update-to', f'{channel}@latest']
+            code, out, err = self.run_yt_dlp_command(update_command, timeout=300)
+            final_code, final_out, final_err = code, out, err
+
+        except Exception as e:
+            wx.CallAfter(wx.MessageBox, f"An unexpected error occurred during the update check: {e}", "Update Error", wx.OK | wx.ICON_ERROR, parent=self.frame) # Assuming self.frame exists, otherwise pass None or self
+            final_code, final_out, final_err = -11, "", f"An unexpected error occurred during the update check: {e}" # Specific thread error code
+        finally:
+            wx.CallAfter(self._finalize_yt_dlp_update, update_dialog, final_code, final_out, final_err, initial_version, channel, cancelled)
+
+    def _finalize_yt_dlp_update(self, dialog_to_destroy, returncode, stdout, stderr, old_version, channel, was_cancelled):
+        """Runs on main thread. Destroys dialog THEN shows result message."""
+        if dialog_to_destroy:
+            try:
+                dialog_to_destroy.Destroy()
+            except (wx.wxAssertionError, RuntimeError) as err:
+                 print(f"Ignoring error destroying progress dialog during finalization: {err}")
+
+        if returncode == -11:
+             wx.MessageBox(f"Update process failed due to an internal error.\n\nDetails: {stderr}", "Update Error", wx.OK | wx.ICON_ERROR, parent=self)
+        else:
+            self._show_yt_dlp_update_final_result(returncode, stdout, stderr, old_version, channel)
+
+    def _show_yt_dlp_update_final_result(self, returncode, stdout, stderr, old_version, channel):
+        """Displays the final result of the yt-dlp update check in a MessageBox."""
+        new_version = old_version # Assume no change initially
+        success = False
+        message = ""
+        icon = wx.ICON_ERROR # Default to error
+
+        # Normalize outputs for reliable checks
+        stdout_lower = stdout.strip().lower() if stdout else ""
+        stderr_lower = stderr.strip().lower() if stderr else ""
+
+        if returncode == 0:
+            updated_match = re.search(r'updated yt-dlp to ([\w.@-]+)', stdout_lower)
+            up_to_date_match = ("already up to date" in stdout_lower) or ("is up to date" in stdout_lower)
+
+            if updated_match:
+                success = True
+                new_version = updated_match.group(1).strip() # Get reported version
+                message = f"yt-dlp updated successfully to version '{new_version}' (from '{old_version}') on the '{channel}' channel."
+                icon = wx.ICON_INFORMATION
+            elif up_to_date_match:
+                success = True
+                current_ver_match = re.search(r'up to date \(([\w.@-]+)\)', stdout_lower)
+                current_version = current_ver_match.group(1).strip() if current_ver_match else old_version
+                message = f"yt-dlp is already up to date on the '{channel}' channel.\nCurrent Version: {current_version}"
+                icon = wx.ICON_INFORMATION
+            else:
+                message = f"yt-dlp command finished successfully (Code: 0), but the output was unexpected. Update status uncertain.\n\nOutput:\n{stdout}\n\nError Output:\n{stderr}"
+                icon = wx.ICON_WARNING
+
+        elif returncode == -2: # Specific timeout code
+            message = f"The yt-dlp update command timed out.\n\nLast Output:\n{stdout}\n\nError Output:\n{stderr}"
+            icon = wx.ICON_ERROR
+        elif returncode == -3: # Specific not found code
+             message = f"Failed to run update: yt-dlp.exe could not be found.\nPlease ensure it is placed correctly or available in PATH."
+             icon = wx.ICON_ERROR
+        else:
+            message = f"Failed to update yt-dlp on the '{channel}' channel (Exit Code: {returncode}).\n\nError Output:\n{stderr}\n\nStandard Output:\n{stdout}"
+            # Append common hints based on error output
+            if "urlopen error" in stderr_lower or "[winerror" in stderr_lower:
+                message += "\n\n(This often indicates a network connection issue or firewall blocking the connection.)"
+            elif "permissionerror" in stderr_lower or "access is denied" in stderr_lower:
+                 message += "\n\n(This suggests Access Hub doesn't have permission to modify yt-dlp.exe. Try running as administrator.)"
+            elif "error: externally-managed environment" in stderr_lower:
+                 message += "\n\n(This usually means yt-dlp was installed via a system package manager like pipx or brew. Use the package manager to update it instead.)"
+
+            icon = wx.ICON_ERROR
+
+        title = "Info"
+        if icon == wx.ICON_WARNING: title = "yt-dlp Update Status Uncertain"
+        if icon == wx.ICON_ERROR: title = "yt-dlp Update Failed"
+        wx.MessageBox(message, title, wx.OK | icon, parent=self)
 
     def on_text_utilities(self, event):
         text_utils_app = TextUtilitiesApp(None, title="Text Utilities")
