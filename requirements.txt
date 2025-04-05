@@ -1,6 +1,5 @@
 wxpython
 python-vlc
-yt-dlp
 youtube-search-python
 httpx==0.27.0
 accessible-output3
