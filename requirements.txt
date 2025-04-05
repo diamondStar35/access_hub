@@ -11,11 +11,9 @@ pydub
 keyboard
 speechRecognition
 pyautogui
-pyperclip
 paramiko
 keyring
 cryptography
-win11toast
 speedtest-cli
 pyaudio
 youtube_comment_downloader
