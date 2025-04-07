@@ -154,7 +154,7 @@ class TaskScheduler(wx.Frame):
     def send_notification(self, event, title, message):
         try:
             notification = wx.adv.NotificationMessage(title, message, parent=self, flags=wx.ICON_INFORMATION)
-            notification.Show(timeout=5)  # Show for 5 seconds
+            notification.Show()
         except Exception as e:
             wx.MessageBox(f"Error sending notification: {e}", "Error", wx.OK | wx.ICON_ERROR)
         self.remove_task(event)

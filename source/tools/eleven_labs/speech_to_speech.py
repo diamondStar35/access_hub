@@ -189,7 +189,7 @@ class ElevenLabsSTS(wx.Panel):
             return
 
         model_id = self.sts_models[self.model_combobox.GetString(selected_model_index)]
-        self.loading_dialog = wx.GenericProgressDialog("Converting Speech", "Please wait...", maximum=100, parent=self,
+        self.loading_dialog = wx.ProgressDialog("Converting Speech", "Please wait...", maximum=100, parent=self,
                                                       style=wx.PD_APP_MODAL | wx.PD_AUTO_HIDE)
         self.loading_dialog.Show()
 

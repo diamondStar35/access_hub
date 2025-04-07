@@ -1,7 +1,7 @@
 import wx
 import wx.adv
 import wx.lib.newevent
-import os, sys, subprocess, re
+import os, sys, subprocess, re, platform
 import shutil
 import webbrowser
 import app_vars
@@ -83,6 +83,7 @@ class AccessHub(wx.Frame):
 
         # taskbar icon
         self.tbIcon = AccessTaskBarIcon(self)
+        self.initialize_notifications()
         self.create_menu_bar()
 
         # Set a pleasing background color
@@ -135,6 +136,21 @@ class AccessHub(wx.Frame):
         if check_updates:
             self.check_for_updates()
 
+
+    def initialize_notifications(self):
+        """
+        Sets up wx.adv.NotificationMessage integration based on platform.
+        Should be called once after the TaskBarIcon is created.
+        """
+        try:
+            if platform.system() == "Windows":
+                if not wx.adv.NotificationMessage.MSWUseToasts():
+                    print("Warning: Could not enable MSW Toast notifications.")
+                wx.adv.NotificationMessage.UseTaskBarIcon(self.tbIcon)
+
+        except Exception as e:
+            print(f"Error initializing notification system: {e}")
+            wx.MessageBox(f"Could not fully initialize native notifications: {e}", "Notification Warning", wx.OK | wx.ICON_WARNING)
 
     def create_menu_bar(self):
         menu_bar = wx.MenuBar()

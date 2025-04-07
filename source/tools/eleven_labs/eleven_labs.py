@@ -2,11 +2,14 @@ import wx
 import app_vars
 from gui.custom_controls import CustomSlider
 from gui.settings import SettingsPanel
-from tools.eleven_labs.speech_to_speech import ElevenLabsSTS
-from tools.eleven_labs.audio_isolator import AudioIsolation
-from tools.eleven_labs.sound_generator import SoundGeneration
+from .speech_to_speech import ElevenLabsSTS
+from .audio_isolator import AudioIsolation
+from .sound_generator import SoundGeneration
+from .shared_voices import SharedVoicesDialog
+from .voice_cloning import VoiceCloningDialog
+from .voice_library  import VoiceLibraryDialog
 from configobj import ConfigObj
-import os
+import os, sys, shutil
 import json
 import requests
 import concurrent.futures
@@ -237,7 +240,7 @@ After conversion: You will have {chars_after} characters remaining."""
         self.download_audio(url, headers, data)
 
     def download_audio(self, url, headers, data):
-        self.loading_dialog = wx.GenericProgressDialog(
+        self.loading_dialog = wx.ProgressDialog(
             "Downloading Audio", "Please wait...", maximum=100, parent=self, style=wx.PD_APP_MODAL | wx.PD_AUTO_HIDE
         )
         self.loading_dialog.Show()
@@ -295,7 +298,7 @@ class ElevenLabs(wx.Frame):
             wx.CallAfter(self.Close)
             return
 
-        self.ffmpeg_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'ffmpeg.exe')
+        self.ffmpeg_path = self.find_ffmpeg()
         self.create_elevenlabs_ui()
         self.Centre()
         self.Show()
@@ -310,7 +313,32 @@ class ElevenLabs(wx.Frame):
             config['ElevenLabs'] = {}
         return config
 
+    def find_ffmpeg(self):
+        """Finds ffmpeg.exe, checking next to script/exe first."""
+        if getattr(sys, 'frozen', False):
+            # Running as compiled executable
+            base_dir = os.path.dirname(sys.executable)
+        else:
+            # Running as script
+            base_dir = os.path.dirname(os.path.abspath(__file__))
+        ffmpeg_exe_path = os.path.join(base_dir, 'ffmpeg.exe')
+        if os.path.exists(ffmpeg_exe_path):
+            return ffmpeg_exe_path
+
+        # Fallback: Check if ffmpeg is in PATH
+        ffmpeg_in_path = shutil.which('ffmpeg')
+        if ffmpeg_in_path:
+            return ffmpeg_in_path
+
+        wx.MessageBox(
+            "ffmpeg.exe was not found next to the application.\n"
+            "Some audio operations might fail. Please download ffmpeg and place ffmpeg.exe in the same folder as the application.",
+            "ffmpeg Missing", wx.OK | wx.ICON_WARNING
+        )
+        return None
+
     def create_elevenlabs_ui(self):
+        self.create_menu_bar()
         notebook = wx.Notebook(self)
         tts_panel = ElevenLabsTTS(notebook, self.api_key, self.ffmpeg_path)
         notebook.AddPage(tts_panel, "Text-to-Speech")
@@ -324,6 +352,41 @@ class ElevenLabs(wx.Frame):
         sizer = wx.BoxSizer()
         sizer.Add(notebook, 1, wx.EXPAND)
         self.SetSizer(sizer)
+        self.Layout()
+
+    def create_menu_bar(self):
+        menu_bar = wx.MenuBar()
+        voices_menu = wx.Menu()
+
+        library_item = voices_menu.Append(wx.ID_ANY, "&Your voices...", "Browse your private and cloned voices on your account")
+        self.Bind(wx.EVT_MENU, self.on_voice_library, library_item)
+
+        shared_voices_item = voices_menu.Append(wx.ID_ANY, "&Voice library...", "Browse shared voices from the community")
+        self.Bind(wx.EVT_MENU, self.on_show_shared_voices, shared_voices_item) # Bind new handler
+
+        cloning_item = voices_menu.Append(wx.ID_ANY, "&Voice Cloning...", "Create a new voice clone")
+        self.Bind(wx.EVT_MENU, self.on_voice_cloning, cloning_item) # Bind new handler
+
+        menu_bar.Append(voices_menu, "&Voices")
+        self.SetMenuBar(menu_bar)
+
+    def on_voice_library(self, event):
+        dialog = VoiceLibraryDialog(self, self.api_key)
+        dialog.ShowModal()
+        dialog.Destroy()
+
+    def on_voice_cloning(self, event):
+        """Opens the Voice Cloning dialog."""
+        cloning_dialog = VoiceCloningDialog(self, self.api_key)
+        cloning_dialog.ShowModal()
+        cloning_dialog.Destroy()
+
+    def on_show_shared_voices(self, event):
+        """Opens the Shared Voices Library dialog."""
+        shared_dialog = SharedVoicesDialog(self, self.api_key)
+        shared_dialog.ShowModal()
+        shared_dialog.Destroy()
+
 
 class ElevenLabsSettings(SettingsPanel):
     category_name = "ElevenLabs"

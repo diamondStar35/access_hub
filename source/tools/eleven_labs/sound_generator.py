@@ -68,7 +68,7 @@ class SoundGeneration(wx.Panel):
             wx.MessageBox("Please enter some text.", "Error", wx.OK | wx.ICON_ERROR)
             return
 
-        self.loading_dialog = wx.GenericProgressDialog("Generating Sound", "Please wait...", maximum=100, parent=self,
+        self.loading_dialog = wx.ProgressDialog("Generating Sound", "Please wait...", maximum=100, parent=self,
                                                       style=wx.PD_APP_MODAL | wx.PD_AUTO_HIDE)
         self.loading_dialog.Show()
         future = self.executor.submit(self.generate_sound_worker, text)

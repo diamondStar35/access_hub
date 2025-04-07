@@ -8,7 +8,6 @@ import stat
 import shutil
 from datetime import datetime
 import time
-import pyperclip
 import concurrent.futures
 
 

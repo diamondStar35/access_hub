@@ -1,13 +1,13 @@
 import wx
+import wx.adv
 import time
 import threading
 import os
 import subprocess
-from win11toast import notify
 
 class DownloadDialog(wx.Dialog):
     def __init__(self, parent, title, file_name, local_path, remote_path, sftp_client):
-        super().__init__(parent, title=title, size=(400, 250), style=wx.DEFAULT_DIALOG_STYLE | wx.RESIZE_BORDER)
+        super().__init__(parent, title=title, size=(600, 350), style=wx.DEFAULT_DIALOG_STYLE | wx.RESIZE_BORDER)
         self.file_name = file_name
         self.local_path = local_path
         self.remote_path = remote_path
@@ -15,6 +15,7 @@ class DownloadDialog(wx.Dialog):
         self.start_time = time.time()
         self.is_cancelled = False
         self.is_background_download = False
+        self._action_id_map = {}
         self.timer = wx.Timer(self)
         self.Bind(wx.EVT_TIMER, self.update_elapsed_time, self.timer)
         self.timer.Start(1000)
@@ -64,10 +65,15 @@ class DownloadDialog(wx.Dialog):
     def start_download(self):
       def _download():
           try:
+              def progress_callback(x, y):
+                   # Check if the dialog still exists before calling GUI methods
+                   if self and not self.IsBeingDeleted():
+                       wx.CallAfter(self.update_progress, x, y)
+
               self.sftp_client.get(
                   self.remote_path,
                   self.local_path,
-                  callback=lambda x, y: wx.CallAfter(self.update_progress, x, y)
+                  callback=progress_callback
               )
               if not self.is_cancelled:
                 wx.CallAfter(self.show_notification)
@@ -91,24 +97,44 @@ class DownloadDialog(wx.Dialog):
                     self.EndModal(wx.ID_OK)
 
     def show_notification(self):
-        if self.is_background_download:
-            def open_folder():
-                folder_path = os.path.dirname(self.local_path)
-                try:
-                    subprocess.Popen(['explorer', os.path.normpath(folder_path)])
-                except Exception:
-                    wx.MessageBox("Could not open folder", "Error", wx.OK | wx.ICON_ERROR)
+        """Shows a wxPython notification when download completes."""
+        if self.is_background_download and self.local_path:
+            try:
+                notification = wx.adv.NotificationMessage(
+                    title="Download Complete",
+                    message=f"{self.file_name} has been downloaded.",
+                    parent=self.GetParent(), # Associate with main frame or relevant parent
+                    flags=wx.ICON_INFORMATION
+                )
 
-            notify(
-                title="Download Complete",
-                body=f"{self.file_name} has been downloaded.",
-                buttons=[{
-                    "activationType": "protocol",
-                    "arguments": f"explorer.exe {os.path.normpath(os.path.dirname(self.local_path))}",  # Correct argument
-                    "content": "Show in folder"
-                }],
-            )
-            open_folder()
+                # Generate a unique ID for the action
+                action_id = wx.NewIdRef()
+                self._action_id_map[action_id.GetId()] = self.local_path # Store path with ID
+
+                # Add the action button
+                if notification.AddAction(action_id.GetId(), "Show in folder"):
+                    notification.Bind(wx.adv.EVT_NOTIFICATION_MESSAGE_ACTION, self.on_notification_action)
+
+                notification.Bind(wx.adv.EVT_NOTIFICATION_MESSAGE_CLICK, self.on_notification_click)
+                notification.Show()
+
+            except Exception as e:
+                wx.CallAfter(wx.MessageBox, f"Error showing notification: {e}", "Error", wx.OK | wx.ICON_ERROR, self.GetParent())
+
+    def on_notification_action(self, event):
+        """Handles clicks on notification actions."""
+        action_id = event.GetId()
+        local_file_path = self._action_id_map.get(action_id)
+
+        if local_file_path:
+            folder_path = os.path.dirname(local_file_path)
+            try:
+                subprocess.Popen(['explorer', os.path.normpath(folder_path)])
+            except Exception as e:
+                 wx.CallAfter(wx.MessageBox, f"Could not open folder:\n{folder_path}\nError: {e}", "Error", wx.OK | wx.ICON_ERROR, self.GetParent())
+            del self._action_id_map[action_id]
+        event.Skip() # Allow other potential handlers
+
 
 class FolderDownloadDialog(wx.Dialog):
     def __init__(self, parent, title, total_files, total_folders, total_size):
@@ -122,6 +148,7 @@ class FolderDownloadDialog(wx.Dialog):
         self.downloaded_size = 0
         self.start_time = time.time()
         self.is_cancelled = False
+        self._action_id_map = {}
         self.is_background_download = False
         self.timer = wx.Timer(self)
         self.Bind(wx.EVT_TIMER, self.update_info, self.timer)

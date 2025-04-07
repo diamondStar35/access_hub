@@ -104,7 +104,7 @@ Characters after isolation: {chars_after}"""
             wx.MessageBox("Please select an audio file.", "Error", wx.OK | wx.ICON_ERROR)
             return
 
-        self.loading_dialog = wx.GenericProgressDialog("Isolating Audio", "Please wait...", maximum=100, parent=self, style=wx.PD_APP_MODAL | wx.PD_AUTO_HIDE)
+        self.loading_dialog = wx.ProgressDialog("Isolating Audio", "Please wait...", maximum=100, parent=self, style=wx.PD_APP_MODAL | wx.PD_AUTO_HIDE)
         self.loading_dialog.Show()
         future = self.executor.submit(self.isolate_audio_worker) # Use executor
         future.add_done_callback(self.on_isolation_complete)

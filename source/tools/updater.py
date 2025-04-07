@@ -93,36 +93,64 @@ class Updater:
         self.new_version = None
         self.download_dialog = None
 
-    def check_for_updates(self):
+    def check_for_updates(self, silent_no_update=True):
         """Checks for updates in a separate thread."""
         with concurrent.futures.ThreadPoolExecutor() as executor:
             future = executor.submit(self._check_version)
-            future.add_done_callback(self._handle_update_result)
+            future.add_done_callback(lambda f: self._handle_update_result(f, silent_no_update))
 
     def _check_version(self):
         """Retrieves version information from the server."""
         try:
-            response = requests.get(self.server_url + "/version.txt")
-            response.raise_for_status()  # Raise HTTPError for bad responses (4xx or 5xx)
-            self.new_version = response.text.strip()
-            if self.new_version != self.current_version:
-              response = requests.get(self.server_url + "/download.txt")
-              response.raise_for_status()
-              self.download_url = response.text.strip()
-            return self.new_version != self.current_version
-        except requests.exceptions.RequestException as e:
-            print(f"Error checking for updates: {e}")
-            wx.MessageBox(f"Failed to check for updates: {e}", "Error", wx.OK | wx.ICON_ERROR)
-            return False
+            version_url = self.server_url + "/version.txt"
+            response_ver = requests.get(version_url, timeout=10) # Add timeout
+            response_ver.raise_for_status()
+            server_version = response_ver.text.strip()
 
-    def _handle_update_result(self, future):
+            if server_version != self.current_version:
+                download_url_path = self.server_url + "/download.txt"
+                response_dl = requests.get(download_url_path, timeout=10) # Add timeout
+                response_dl.raise_for_status()
+                download_url = response_dl.text.strip()
+                self.new_version = server_version # Store for later use
+                self.download_url = download_url # Store for later use
+                return {'update_available': True, 'new_version': server_version, 'download_url': download_url, 'error': None}
+            else:
+                # No update available
+                return {'update_available': False, 'error': None}
+
+        except requests.exceptions.Timeout:
+             error_msg = "Connection timed out while checking for updates."
+             return {'update_available': False, 'error': error_msg}
+        except requests.exceptions.RequestException as e:
+            error_msg = f"Error checking for updates: {e}"
+            return {'update_available': False, 'error': error_msg}
+        except Exception as e: # Catch potential other errors (e.g., file parsing if format changes)
+             error_msg = f"An unexpected error occurred during update check: {e}"
+             return {'update_available': False, 'error': error_msg}
+
+    def _handle_update_result(self, future, silent_no_update):
         """Handles the result of the version check."""
         try:
-            update_available = future.result()
-            if update_available:
+            result = future.result()
+            if result['error']:
+                if not silent_no_update:
+                    wx.CallAfter(wx.MessageBox, f"Failed to check for updates:\n{result['error']}", "Update Check Error", wx.OK | wx.ICON_ERROR)
+                return
+
+            if result['update_available']:
                 wx.CallAfter(self._prompt_update)
+            else:
+                if not silent_no_update:
+                     wx.CallAfter(wx.MessageBox,
+                                  f"{app_vars.app_name} is already up to date (Version: {self.current_version}).",
+                                  "No Updates Available",
+                                  wx.OK | wx.ICON_INFORMATION)
+
         except Exception as e:
-            print(f"Error in update check: {e}")
+            print(f"Error processing update check result: {e}")
+            if not silent_no_update:
+                wx.CallAfter(wx.MessageBox, f"An error occurred after checking for updates: {e}", "Update Check Error", wx.OK | wx.ICON_ERROR)
 
     def _prompt_update(self):
         """Prompts the user to update."""
