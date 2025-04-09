@@ -1,6 +1,7 @@
 import wx, concurrent.futures, json, requests
 from gui.custom_controls import CustomSlider
 from .settings_editor import EditVoiceSettings
+from .audio_player import SimplePlayer
 
 
 class VoiceLibraryDialog(wx.Dialog):
@@ -30,6 +31,10 @@ class VoiceLibraryDialog(wx.Dialog):
         self.edit_button.Bind(wx.EVT_BUTTON, self.on_edit)
         self.edit_button.Disable() # Disabled initially
 
+        self.preview_button = wx.Button(panel, label="&Preview")
+        self.preview_button.Bind(wx.EVT_BUTTON, self.on_preview)
+        self.preview_button.Disable()
+
         self.delete_button = wx.Button(panel, label="&Delete Voice")
         self.delete_button.Bind(wx.EVT_BUTTON, self.on_delete)
         self.delete_button.Disable()
@@ -38,6 +43,7 @@ class VoiceLibraryDialog(wx.Dialog):
         close_button.Bind(wx.EVT_BUTTON, self.on_close)
 
         button_sizer.Add(self.edit_button, 0, wx.ALL, 5)
+        button_sizer.Add(self.preview_button, 0, wx.ALL, 5)
         button_sizer.Add(self.delete_button, 0, wx.ALL, 5)
         button_sizer.AddStretchSpacer(1)
         button_sizer.Add(close_button, 0, wx.ALL, 5)
@@ -58,6 +64,26 @@ class VoiceLibraryDialog(wx.Dialog):
         edit_dialog = EditVoiceSettings(self, self.api_key, self.selected_voice_id, voice_name)
         edit_dialog.ShowModal()
         edit_dialog.Destroy()
+
+    def on_preview(self, event):
+        """Plays the preview audio for the selected voice."""
+        if self.selected_list_index == -1:
+            wx.MessageBox("Please select a voice from the list first.", "No Selection", wx.OK | wx.ICON_WARNING)
+            return
+
+        try:
+            selected_voice_data = self.all_voices[self.selected_list_index]
+            preview_url = selected_voice_data.get('preview_url')
+            if preview_url:
+                player_dialog = SimplePlayer(self, preview_url, title=f"Preview: {selected_voice_data.get('name', 'Voice')}")
+                player_dialog.ShowModal() # Blocks until player closes
+            else:
+                wx.MessageBox("No preview URL available for this voice.", "Preview Not Found", wx.OK | wx.ICON_INFORMATION)
+
+        except IndexError:
+             wx.MessageBox("Error retrieving voice data. Please try selecting again.", "Selection Error", wx.OK | wx.ICON_ERROR)
+        except Exception as e:
+            wx.MessageBox(f"An unexpected error occurred trying to play the preview:\n{e}", "Preview Error", wx.OK | wx.ICON_ERROR)
 
     def on_delete(self, event):
         if not self.selected_voice_id or self.selected_list_index < 0:
@@ -154,10 +180,12 @@ class VoiceLibraryDialog(wx.Dialog):
         if 0 <= self.selected_list_index < len(self.all_voices):
             self.selected_voice_id = self.all_voices[self.selected_list_index].get('voice_id')
             self.edit_button.Enable()
+            self.preview_button.Enable()
             self.delete_button.Enable()
         else: # Should not happen if list is populated, but be safe
             self.selected_voice_id = None
             self.edit_button.Disable()
+            self.preview_button.Disable()
             self.delete_button.Disable()
         event.Skip()
 
@@ -165,6 +193,7 @@ class VoiceLibraryDialog(wx.Dialog):
         self.selected_list_index = -1
         self.selected_voice_id = None
         self.edit_button.Disable()
+        self.preview_button.Disable()
         self.delete_button.Disable()
         event.Skip()
 

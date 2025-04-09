@@ -3,6 +3,7 @@ import requests
 import concurrent.futures
 import json
 import os
+from .audio_player import SimplePlayer
 
 
 class SharedVoicesDialog(wx.Dialog):
@@ -52,6 +53,8 @@ class SharedVoicesDialog(wx.Dialog):
         main_sizer.Add(self.list_ctrl, 1, wx.EXPAND | wx.ALL, 10)
 
         bottom_sizer = wx.BoxSizer(wx.HORIZONTAL)
+        self.preview_button = wx.Button(panel, label="&Preview")
+        self.preview_button.Disable()
         self.prev_button = wx.Button(panel, label="Previous Page")
         self.next_button = wx.Button(panel, label="Next Page")
         self.page_info_text = wx.StaticText(panel, label="Page 1")
@@ -59,6 +62,7 @@ class SharedVoicesDialog(wx.Dialog):
         self.add_button.Disable()
         close_button = wx.Button(panel, wx.ID_CLOSE)
 
+        self.preview_button.Bind(wx.EVT_BUTTON, self.on_preview)
         self.prev_button.Bind(wx.EVT_BUTTON, self.on_previous_page)
         self.next_button.Bind(wx.EVT_BUTTON, self.on_next_page)
         self.add_button.Bind(wx.EVT_BUTTON, self.on_add_voice)
@@ -99,6 +103,26 @@ class SharedVoicesDialog(wx.Dialog):
         else:
              self.search_text.SetValue("") # Just clear the box if no search active
 
+    def on_preview(self, event):
+        """Plays the preview audio for the selected shared voice."""
+        if not self.selected_voice_info:
+            wx.MessageBox("Please select a voice from the list first.", "No Selection", wx.OK | wx.ICON_WARNING)
+            return
+
+        try:
+            preview_url = self.selected_voice_info.get('preview_url')
+            voice_name = self.selected_voice_info.get('name', 'Shared Voice')
+            if preview_url:
+                player_dialog = SimplePlayer(self, preview_url, title=f"Preview: {voice_name}")
+                player_dialog.ShowModal()
+            else:
+                wx.MessageBox(f"No preview URL is available for the shared voice '{voice_name}'.",
+                              "Preview Not Available", wx.OK | wx.ICON_INFORMATION)
+
+        except Exception as e:
+            wx.MessageBox(f"An unexpected error occurred trying to play the preview:\n{e}",
+                          "Preview Error", wx.OK | wx.ICON_ERROR)
+
     def on_previous_page(self, event):
         if self.current_page > 0:
             self.current_page -= 1
@@ -119,15 +143,18 @@ class SharedVoicesDialog(wx.Dialog):
 
         if 0 <= selected_index < len(self.displayed_voices_on_page):
             self.selected_voice_info = self.displayed_voices_on_page[selected_index]
+            self.preview_button.Enable(True)
             self.add_button.Enable(True)
         else:
             self.selected_voice_info = {}
+            self.preview_button.Disable()
             self.add_button.Disable()
         if event: event.Skip()
 
     def on_list_item_deselected(self, event):
         """Disables Add button when selection is lost."""
         self.selected_voice_info = {}
+        self.preview_button.Disable()
         self.add_button.Disable()
         event.Skip()
 
