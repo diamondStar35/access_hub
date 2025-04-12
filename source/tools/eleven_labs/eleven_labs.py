@@ -7,6 +7,7 @@ from .audio_isolator import AudioIsolation
 from .sound_generator import SoundGeneration
 from .shared_voices import SharedVoicesDialog
 from .voice_cloning import VoiceCloningDialog
+from .voice_design import AddVoiceFromPromptDialog
 from .voice_library  import VoiceLibraryDialog
 from configobj import ConfigObj
 import os, sys, shutil
@@ -367,6 +368,9 @@ class ElevenLabs(wx.Frame):
         cloning_item = voices_menu.Append(wx.ID_ANY, "&Voice Cloning...", "Create a new voice clone")
         self.Bind(wx.EVT_MENU, self.on_voice_cloning, cloning_item) # Bind new handler
 
+        prompt_item = voices_menu.Append(wx.ID_ANY, "Add Voice from &Prompt...", "Create a new voice using text description")
+        self.Bind(wx.EVT_MENU, self.on_add_voice_from_prompt, prompt_item)
+
         menu_bar.Append(voices_menu, "&Voices")
         self.SetMenuBar(menu_bar)
 
@@ -379,13 +383,22 @@ class ElevenLabs(wx.Frame):
         """Opens the Voice Cloning dialog."""
         cloning_dialog = VoiceCloningDialog(self, self.api_key)
         cloning_dialog.ShowModal()
-        cloning_dialog.Destroy()
+        if cloning_dialog:
+             cloning_dialog.Destroy()
 
     def on_show_shared_voices(self, event):
         """Opens the Shared Voices Library dialog."""
         shared_dialog = SharedVoicesDialog(self, self.api_key)
         shared_dialog.ShowModal()
-        shared_dialog.Destroy()
+        if shared_dialog:
+             shared_dialog.Destroy()
+
+    def on_add_voice_from_prompt(self, event):
+        """Opens the Add Voice From Prompt dialog."""
+        dialog = AddVoiceFromPromptDialog(self, self.api_key, self.ffmpeg_path)
+        dialog.ShowModal()
+        if dialog:
+             dialog.Destroy()
 
 
 class ElevenLabsSettings(SettingsPanel):
