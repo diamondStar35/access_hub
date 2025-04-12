@@ -68,6 +68,18 @@ def get_keyboard_language():
 class AccessHub(wx.Frame):
     def __init__(self, parent, title):
         super(AccessHub, self).__init__(parent, title=title, size=(800, 600))
+        self.tools_list = [
+            ("Text Tools", "Manipulate and analyze text content.", self.on_text_utilities),
+            ("Task Scheduler", "Schedule tasks to run automatically.", self.on_task_scheduler),
+            ("Shutdown Control", "Schedule system shutdown, restart, or logoff.", self.on_shutdown_control),
+            ("Password Doctor", "Analyze password strength and check for breaches.", self.on_password_doctor),
+            ("Network player", "Play streams from YouTube or direct links.", self.on_network_player),
+            ("ElevenLabs", "Generate speech using ElevenLabs AI.", self.on_elevenlabs),
+            ("Accessible SSH Terminal", "Connect to SSH servers accessibly.", self.on_ssh_terminal),
+            ("Internet Speed Test", "Measure your internet connection speed.", self.on_speed_test),
+            ("Online Text to Speech", "Convert text to speech using online services.", self.on_online_tts),
+        ]
+
         self.child_frames = [] # List to store child frames
         self.task_scheduler = None
         self.is_recording = False
@@ -104,30 +116,40 @@ class AccessHub(wx.Frame):
         # Add some spacing
         sizer.AddSpacer(20)
         sizer.Add(title_text, 0, wx.ALL | wx.EXPAND, 10)
-        sizer.AddSpacer(20)
+        sizer.AddSpacer(15)
 
-        # Create buttons dynamically
-        tools = {
-            "Text Tools": self.on_text_utilities,
-            "Task Scheduler": self.on_task_scheduler,
-            "Shutdown Control": self.on_shutdown_control,
-            "Password Doctor": self.on_password_doctor,
-            "Network player": self.on_network_player,
-            "ElevenLabs": self.on_elevenlabs,
-            "Accessible SSH Terminal": self.on_ssh_terminal,
-            "Internet Speed Test": self.on_speed_test,
-            "Online Text to Speech": self.on_online_tts,
-        }
+        # Create the ListCtrl
+        self.tool_list_ctrl = wx.ListCtrl(panel, style=wx.LC_REPORT | wx.LC_SINGLE_SEL | wx.LC_VRULES | wx.LC_HRULES)
+        self.tool_list_ctrl.SetFont(wx.Font(10, wx.FONTFAMILY_SWISS, wx.FONTSTYLE_NORMAL, wx.FONTWEIGHT_NORMAL))
+        self.tool_list_ctrl.SetBackgroundColour(wx.Colour(250, 250, 250)) # Slightly lighter for the list
+        self.tool_list_ctrl.Bind(wx.EVT_LIST_ITEM_ACTIVATED, self.on_run_tool)
 
-        for tool_name, handler in tools.items():
-            button = wx.Button(panel, label=tool_name)
-            button.Bind(wx.EVT_BUTTON, handler)
-            sizer.Add(button, 0, wx.ALL | wx.EXPAND, 5)
+        # Add columns
+        self.tool_list_ctrl.InsertColumn(0, "Tool Name", width=200)
+        self.tool_list_ctrl.InsertColumn(1, "Description", width=450)
+
+        # Populate the list
+        for index, (name, description, handler) in enumerate(self.tools_list):
+            # Get the current item count to determine the insertion index for appending
+            current_item_count = self.tool_list_ctrl.GetItemCount()
+            list_index = self.tool_list_ctrl.InsertItem(current_item_count, name)
+            self.tool_list_ctrl.SetItem(list_index, 1, description)
+            self.tool_list_ctrl.SetItemData(list_index, index)
+        sizer.Add(self.tool_list_ctrl, 1, wx.ALL | wx.EXPAND, 10)
+
+        run_button = wx.Button(panel, label="Run")
+        run_button.Bind(wx.EVT_BUTTON, self.on_run_tool)
+        sizer.Add(run_button, 0, wx.ALIGN_CENTER | wx.ALL, 10)
 
         panel.SetSizer(sizer)
 
+        frame_sizer = wx.BoxSizer(wx.VERTICAL)
+        frame_sizer.Add(panel, 1, wx.EXPAND | wx.ALL, 0) # Add panel, allow expansion, no extra border here
+        self.SetSizer(frame_sizer)
+
         # Finalize the layout
-        sizer.Fit(panel)
+        self.Layout()
+        self.Fit()   
         self.Centre()
         self.Show(True)
         self.start_hotkey_listener()
@@ -136,6 +158,18 @@ class AccessHub(wx.Frame):
         if check_updates:
             self.check_for_updates()
 
+
+    def on_run_tool(self, event):
+        """Handles running the tool selected in the list control."""
+        selected_index = self.tool_list_ctrl.GetFirstSelected()
+        if selected_index != -1:
+            tool_data_index = self.tool_list_ctrl.GetItemData(selected_index)
+            # Get the handler using the retrieved index
+            _, _, handler = self.tools_list[tool_data_index]
+            if callable(handler):
+                handler(event)
+            else:
+                wx.MessageBox(f"Error: No valid action found for selected tool.", "Error", wx.OK | wx.ICON_ERROR)
 
     def initialize_notifications(self):
         """
