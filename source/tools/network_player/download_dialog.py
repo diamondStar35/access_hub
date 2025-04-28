@@ -5,6 +5,39 @@ import os
 import re
 import sys
 from speech import speak
+import urllib.parse
+import uuid
+
+
+def normalize_filename(filename):
+    """
+    Cleans a string to be suitable for use as a filename.
+    Removes invalid characters, control characters, and characters
+    outside the Basic Multilingual Plane (common for emojis).
+    """
+    # 1. Remove standard invalid filesystem characters for most OSes
+    #    Replace with underscore '_'
+    safe_name = re.sub(r'[<>:"/\\|?*]', '_', filename)
+
+    # 2. Remove non-printable control characters (ASCII C0 and C1 controls)
+    #    Replace with empty string ''
+    safe_name = re.sub(r'[\x00-\x1f\x7f-\x9f]', '', safe_name)
+
+    # 3. Remove characters outside the Basic Multilingual Plane (U+0000 to U+FFFF)
+    #    This removes many emojis and symbols that cause issues in filenames.
+    #    Replace with empty string ''
+    safe_name = "".join(c for c in safe_name if ord(c) <= 0xFFFF)
+
+    # 4. Collapse sequences of multiple underscores to a single underscore.
+    safe_name = re.sub(r'_+', '_', safe_name)
+    # 5. Collapse sequences of multiple spaces to a single space.
+    safe_name = re.sub(r' +', ' ', safe_name)
+    safe_name = safe_name.strip('_ ')
+
+    # Ensure filename is not empty after cleaning
+    if not safe_name:
+        safe_name = filename
+    return safe_name
 
 class DownloadDialog(wx.Dialog):
     def __init__(self, parent, title, is_audio=False):
@@ -72,7 +105,8 @@ class DownloadDialog(wx.Dialog):
 
     def download_task(self, url, title, download_path):
         self.url = url
-        self.safe_title = re.sub(r'[<>:"/\\|?*]', '_', title).strip()
+        # self.safe_title = re.sub(r'[<>:"/\\|?*]', '_', title).strip()
+        self.safe_title = normalize_filename(title)
         if not self.safe_title:
             self.safe_title = "download"
 
@@ -92,27 +126,59 @@ class DownloadDialog(wx.Dialog):
         self.dl_thread.start()
         wx.CallAfter(self.SetFocus)
 
+    def extract_video_id(self, url):
+        """Extracts YouTube video ID from various URL formats."""
+
+        try:
+            parsed_url = urllib.parse.urlparse(url)
+            if parsed_url.hostname == 'youtu.be':
+                return parsed_url.path[1:]
+            if parsed_url.hostname in ('www.youtube.com', 'youtube.com', 'm.youtube.com'):
+                if parsed_url.path == '/watch':
+                    query = urllib.parse.parse_qs(parsed_url.query)
+                    return query.get('v', [None])[0]
+                if parsed_url.path.startswith('/embed/'):
+                    return parsed_url.path.split('/embed/')[1]
+                if parsed_url.path.startswith('/v/'):
+                    return parsed_url.path.split('/v/')[1]
+        except Exception as e:
+            print(f"Error parsing video ID from URL '{url}': {e}")
+        return str(uuid.uuid4())
+
     def start_download_process(self):
         """Prepares and starts the yt-dlp subprocess."""
         try:
             if not self.downloading:
                 return
 
+            self.video_id = self.extract_video_id(self.url)
+            if not self.video_id:
+                 error_msg = "Could not determine video ID for temporary filename."
+                 wx.CallAfter(self.update_status, error_msg, speak_msg=True)
+                 wx.CallAfter(self.on_finish)
+                 return
+
+            self.temp_filename_base = self.video_id
+            temp_output_template = os.path.join(self.download_path, f'{self.temp_filename_base}.%(ext)s')
+            temp_output_template = os.path.normpath(temp_output_template)
+
             cmd = [self.yt_dlp_exe_path]
             cmd.extend(['--no-warnings', '--progress', '--no-playlist'])
             cmd.extend(['--ffmpeg-location', self.ffmpeg_dir])
-
-            output_template = f'{self.safe_title}.%(ext)s'
             cmd.extend(['-P', self.download_path])
-            cmd.extend(['-o', output_template])
+            cmd.extend(['-o', temp_output_template])
 
             if self.is_audio:
                 # Download best audio and use yt-dlp's post-processor to convert
+                self.final_extension = ".mp3"
                 cmd.extend(['-f', 'bestaudio/best'])
                 cmd.extend(['-x'])
                 cmd.extend(['--audio-format', 'mp3'])
                 cmd.extend(['--audio-quality', '128K'])
+                cmd.extend(['--add-metadata'])
+                cmd.extend(['--embed-thumbnail'])
             else:
+                self.final_extension = ".mp4"
                 cmd.extend(['-f', 'bestvideo[ext=mp4]+bestaudio[ext=m4a]/bestvideo+bestaudio/best'])
                 cmd.extend(['--merge-output-format', 'mp4'])
 
@@ -155,18 +221,38 @@ class DownloadDialog(wx.Dialog):
 
             if self.downloading:
                 if self.process.returncode == 0:
-                    # Check if the expected final file exists (especially important after conversion)
-                    expected_filename = f"{self.safe_title}.mp3" if self.is_audio else f"{self.safe_title}.mp4"
-                    expected_filepath = os.path.join(self.download_path, expected_filename)
-                    if os.path.exists(expected_filepath):
-                         self.success = True
-                         wx.CallAfter(self.update_status, "Download finished successfully.", speak_msg=True)
-                    else:
-                        # This can happen if post-processing fails silently or creates a different filename
+                    self.success = True
+                    wx.CallAfter(self.update_status, "Download process finished. Finalizing...", speak_msg=False)
+
+                    try:
+                        temp_file_path = os.path.join(self.download_path, f"{self.temp_filename_base}{self.final_extension}")
+                        temp_file_path = os.path.normpath(temp_file_path)
+                        final_file_path = os.path.join(self.download_path, f"{self.safe_title}{self.final_extension}")
+                        final_file_path = os.path.normpath(final_file_path)
+
+                        # Check if the temporary file exists before renaming
+                        if os.path.exists(temp_file_path):
+                            if os.path.exists(final_file_path) and temp_file_path != final_file_path:
+                                os.remove(final_file_path)
+                            os.rename(temp_file_path, final_file_path)
+                            wx.CallAfter(self.update_status, "Download finished successfully.", speak_msg=True)
+                        else:
+                            if os.path.exists(final_file_path):
+                                wx.CallAfter(self.update_status, "Download finished successfully.", speak_msg=True)
+                            else:
+                                self.success = False
+                                error_msg = f"Download finished, but expected file '{os.path.basename(temp_file_path)}' or '{os.path.basename(final_file_path)}' not found."
+                                wx.CallAfter(self.update_status, error_msg, speak_msg=True)
+
+                    except OSError as e:
                         self.success = False
-                        error_msg = f"Download process finished, but expected file '{expected_filename}' not found."
-                        print(error_msg)
+                        error_msg = f"Error during file finalization/rename: {e}"
                         wx.CallAfter(self.update_status, error_msg, speak_msg=True)
+                    except Exception as e:
+                        self.success = False
+                        error_msg = f"Unexpected error during file finalization: {e}"
+                        wx.CallAfter(self.update_status, error_msg, speak_msg=True)
+
                 else:
                     self.success = False
                     error_msg = f"Download failed. yt-dlp exited with code {self.process.returncode}."
