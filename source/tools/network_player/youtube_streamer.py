@@ -20,11 +20,8 @@ class YoutubeStreamer(wx.Dialog):
         self.url_text.Bind(wx.EVT_TEXT_ENTER, self.on_ok)
         vbox.Add(self.url_text, 0, wx.ALL | wx.EXPAND, 10)
 
-        play_as_label = wx.StaticText(panel, label="Play as:")
-        vbox.Add(play_as_label, 0, wx.ALL | wx.ALIGN_LEFT, 10)
-
         self.play_as_choices = ["Video", "Audio"]
-        self.play_as_radio = wx.RadioBox(panel, choices=self.play_as_choices, majorDimension=1)
+        self.play_as_radio = wx.RadioBox(panel, label="Play as:", choices=self.play_as_choices, majorDimension=1)
         vbox.Add(self.play_as_radio, 0, wx.ALL | wx.EXPAND, 10)
 
         quality_label = wx.StaticText(panel, label="Video Quality:")

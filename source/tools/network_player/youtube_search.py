@@ -1,17 +1,19 @@
 import wx
 from .youtube_player import YoutubePlayer, EVT_VLC_READY
-from .download_dialog import DownloadDialog
+from .download_dialogs import DownloadSettingsDialog, DownloadDialog
 from .utils import run_yt_dlp_json
 from youtubesearchpython import VideosSearch
 from speech import speak
 from configobj import ConfigObj
+from gui.dialogs import DescriptionDialog
 import app_vars
 import threading
 from wx.lib.newevent import NewEvent
 import os
 
-# Event for search completion
+# Events for search completion and description
 YoutubeSearchEvent, EVT_YOUTUBE_SEARCH = NewEvent()
+DescriptionFetchEvent, EVT_DESCRIPTION_FETCH = NewEvent()
 
 class YoutubeSearchDialog(wx.Dialog):
     def __init__(self, parent, network_player_frame):
@@ -103,7 +105,7 @@ class YoutubeSearchResults(wx.Frame):
         vbox.Add(play_button, 0, wx.ALL | wx.ALIGN_RIGHT, 5)
 
         download_button = wx.Button(panel, label="Download")
-        download_button.Bind(wx.EVT_BUTTON, self.onDownloadVideo)
+        download_button.Bind(wx.EVT_BUTTON, self.onDownloadSelectedVideo)
         vbox.Add(download_button, 0, wx.ALL | wx.ALIGN_RIGHT, 5)
 
         panel.SetSizer(vbox)
@@ -114,6 +116,7 @@ class YoutubeSearchResults(wx.Frame):
         self.Bind(wx.EVT_CHAR_HOOK, self.onKey)
         self.results_listbox.Bind(wx.EVT_CONTEXT_MENU, self.onContextMenu)
         self.results_listbox.Bind(wx.EVT_LISTBOX, self.onListBox)
+        self.Bind(EVT_DESCRIPTION_FETCH, self.onDescriptionFetchComplete)
 
 
     def onListBox(self, event):
@@ -343,16 +346,18 @@ class YoutubeSearchResults(wx.Frame):
         self.context_menu.Append(copy_item)
         self.Bind(wx.EVT_MENU, self.onCopyLinkFromMenu, copy_item)
 
-        download_menu = wx.Menu()
-        download_video_item = wx.MenuItem(download_menu, wx.ID_ANY, "Video")
-        download_menu.Append(download_video_item)
-        self.Bind(wx.EVT_MENU, self.onDownloadVideo, download_video_item)
+        download_item = wx.MenuItem(self.context_menu, wx.ID_ANY, "Download video...")
+        self.context_menu.Append(download_item)
+        self.Bind(wx.EVT_MENU, self.onDownloadSelectedVideo, download_item)
 
-        download_audio_item = wx.MenuItem(download_menu, wx.ID_ANY, "Audio")
-        download_menu.Append(download_audio_item)
-        self.Bind(wx.EVT_MENU, self.onDownloadAudioFromMenu, download_audio_item)
-        download_parent_item = wx.MenuItem(self.context_menu, wx.ID_ANY, "Download")
-        self.context_menu.AppendSubMenu(download_menu, "Download") # Appending the submenu
+        direct_download_item = wx.MenuItem(self.context_menu, wx.ID_ANY, "Direct Download")
+        self.context_menu.Append(direct_download_item)
+        self.Bind(wx.EVT_MENU, self.onDirectDownload, direct_download_item)
+
+        show_description_item = wx.MenuItem(self.context_menu, wx.ID_ANY, "Video description")
+        self.context_menu.Append(show_description_item)
+        self.Bind(wx.EVT_MENU, self.onShowDescription, show_description_item) # Bind to new handler
+
         self.PopupMenu(self.context_menu, event.GetPosition())
 
     def onCopyLinkFromMenu(self, event):
@@ -379,33 +384,106 @@ class YoutubeSearchResults(wx.Frame):
         else:
             wx.MessageBox("Could not access clipboard.", "Error", wx.OK | wx.ICON_ERROR)
 
-    def onDownloadVideo(self, event):
+    def onShowDescription(self, event):
         selection = self.results_listbox.GetSelection()
         if selection != -1:
             selected_video = self.results[selection]
-            self.download(selected_video['link'],selected_video['title'], is_audio=False)
-        else:
-            wx.MessageBox("Please select a video to download.", "Error", wx.OK | wx.ICON_INFORMATION)
+            video_url = selected_video['link']
+            video_title = selected_video['title'] # Get title for loading message
 
-    def onDownloadAudioFromMenu(self, event):
-        selection = self.results_listbox.GetSelection()
-        if selection != -1:
-            selected_video = self.results[selection]
-            self.download(selected_video['link'], selected_video['title'],is_audio=True)
+            self.show_loading_dialog(f"Fetching description for: {video_title}")
+            threading.Thread(target=self.fetch_description_thread, args=(video_url,)).start()
         else:
-            wx.MessageBox("Please select a video to download.", "Error", wx.OK | wx.ICON_INFORMATION)
+            wx.MessageBox("Please select a video to view its description.", "Error", wx.OK | wx.ICON_INFORMATION)
 
-    def download(self, url, title, is_audio=False):
+    def fetch_description_thread(self, video_url):
+        """Worker thread to fetch video description using yt-dlp."""
+        description = None
+        error_message = None
         try:
-           with wx.DirDialog(self, "Choose download directory", style=wx.DD_DEFAULT_STYLE) as dialog:
-               if dialog.ShowModal() == wx.ID_OK:
-                    download_path = dialog.GetPath()
-                    download_dlg = DownloadDialog(self, f"Downloading: {title}", is_audio)
-                    download_dlg.download_task(url, title, download_path)
-               else:
-                   return
+            info_dict = run_yt_dlp_json(video_url)
+
+            if info_dict:
+                description = info_dict.get('description', 'No description available.')
+            else:
+                 error_message = "Failed to fetch video information."
+
+        except FileNotFoundError:
+             error_message = "Error: yt-dlp.exe not found. Cannot fetch description."
         except Exception as e:
-             wx.MessageBox(f"Could not start download: {e}", "Error", wx.OK | wx.ICON_ERROR)
+            error_message = f"Error fetching description: {e}"
+            print(f"Error fetching description for {video_url}: {e}")
+        wx.PostEvent(self, DescriptionFetchEvent(description=description, error=error_message))
+
+    def onDescriptionFetchComplete(self, event):
+        """Handles the completion of the description fetching thread."""
+        self.destroy_loading_dialog()
+
+        description = event.description
+        error_message = event.error
+
+        if error_message:
+            wx.MessageBox(error_message, "Error Fetching Description", wx.OK | wx.ICON_ERROR)
+        elif description is not None:
+            desc_dlg = DescriptionDialog(self, "Video description", description)
+            desc_dlg.ShowModal()
+            desc_dlg.Destroy()
+        else:
+             wx.MessageBox("Description not available for this video.", "Description Unavailable", wx.OK | wx.ICON_INFORMATION)
+
+    def onDownloadSelectedVideo(self, event):
+        selection = self.results_listbox.GetSelection()
+        if selection != -1:
+            selected_video = self.results[selection]
+            video_url = selected_video['link']
+            video_title = selected_video['title']
+
+            settings_dialog = DownloadSettingsDialog(self, "Download Settings", video_title, video_url)
+            if settings_dialog.ShowModal() == wx.ID_OK:
+                download_settings = settings_dialog.settings
+                self.start_download_process(download_settings)
+            settings_dialog.Destroy()
+        else:
+            wx.MessageBox("Please select a video to download.", "Error", wx.OK | wx.ICON_INFORMATION)
+
+    def onDirectDownload(self, event):
+        selection = self.results_listbox.GetSelection()
+        if selection != -1:
+            selected_video = self.results[selection]
+            video_url = selected_video['link']
+            video_title = selected_video['title']
+
+            youtube_settings = self.config.get('YouTube', {})
+            default_type = youtube_settings.get('default_download_type', 'Video')
+            default_video_quality = youtube_settings.get('default_video_quality', 'Medium')
+            default_audio_format = youtube_settings.get('default_audio_format', 'mp3')
+            default_audio_quality = youtube_settings.get('default_audio_quality', '128K')
+            default_directory = youtube_settings.get('default_download_directory', '')
+
+            # Validate default directory
+            if not default_directory or not os.path.isdir(default_directory):
+                wx.MessageBox("Default download directory is not set or invalid. Please configure it in Settings.", "Direct Download Failed", wx.OK | wx.ICON_WARNING)
+                return
+
+            download_settings = {
+                'url': video_url,
+                'filename': video_title,
+                'directory': default_directory,
+                'type': default_type,
+                'video_quality': default_video_quality,
+                'audio_format': default_audio_format,
+                'audio_quality': default_audio_quality,
+            }
+            self.start_download_process(download_settings)
+        else:
+            wx.MessageBox("Please select a video to download.", "Error", wx.OK | wx.ICON_INFORMATION)
+
+    def start_download_process(self, download_settings):
+        """Starts the DownloadDialog with the collected settings."""
+        dlg_title = f"Downloading: {download_settings['filename']}"
+        download_dlg = DownloadDialog(self, dlg_title, download_settings)
+        download_dlg.download_task()
+
 
     def onClose(self, event):
         if self.parent:

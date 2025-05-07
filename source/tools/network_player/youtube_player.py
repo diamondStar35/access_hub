@@ -3,8 +3,9 @@ from wx.lib.newevent import NewEvent
 from youtube_comment_downloader.downloader import YoutubeCommentDownloader, SORT_BY_POPULAR
 import app_vars
 from gui.custom_controls import CustomButton
+from gui.dialogs import DescriptionDialog
 from .comments import CommentsDialog
-from .download_dialog import DownloadDialog
+from .download_dialogs import DownloadSettingsDialog, DownloadDialog
 from .subtitle_manager import SubtitleManager
 from speech import speak
 import vlc
@@ -105,13 +106,11 @@ class YoutubePlayer(wx.Frame):
         menubar = wx.MenuBar()
         video_menu = wx.Menu()
         download_menu = wx.Menu()
-        download_video_item = download_menu.Append(wx.ID_ANY, "Video")
-        download_audio_item = download_menu.Append(wx.ID_ANY, "Audio")
+        download_item = video_menu.Append(wx.ID_ANY, "Download...")
+        self.Bind(wx.EVT_MENU, self.on_download_menu_item, download_item)
         self.save_selection_item = download_menu.Append(wx.ID_ANY, "Save Selection\tctrl+s")
         self.Bind(wx.EVT_MENU, self.save_selection, self.save_selection_item)
         self.save_selection_item.Enable(False)  # Initially disabled
-        self.Bind(wx.EVT_MENU, lambda event: self.on_download_from_menu(event, is_audio=False), download_video_item)
-        self.Bind(wx.EVT_MENU, lambda event: self.on_download_from_menu(event, is_audio=True), download_audio_item)
         video_menu.AppendSubMenu(download_menu, "&Download")
 
         description_item = video_menu.Append(wx.ID_ANY, "Video Description\talt+d")
@@ -413,7 +412,6 @@ class YoutubePlayer(wx.Frame):
                 if formats:
                     media_url = formats[0].get('url')
             if not media_url:
-                print("Could not find media URL in yt-dlp JSON output for next/prev.")
                 raise ValueError("No playable URL found in yt-dlp output for next/prev.")
 
             self.url = media_url
@@ -562,22 +560,12 @@ class YoutubePlayer(wx.Frame):
                 self.save_selection_item.Enable(False)
 
     def show_description(self, event):
-        dlg = wx.Dialog(self, title="Video Description", style=wx.DEFAULT_DIALOG_STYLE | wx.RESIZE_BORDER)
-        dlg.SetSize(800, 600)
-        dlg.SetMinSize((800, 600))
-        panel = wx.Panel(dlg)
-
-        text_area = wx.TextCtrl(panel, -1, self.description, style=wx.TE_MULTILINE | wx.TE_READONLY | wx.HSCROLL)
-        ok_button = wx.Button(panel, wx.ID_OK, "Close")
-
-        sizer = wx.BoxSizer(wx.VERTICAL)
-        sizer.Add(text_area, 1, wx.ALL | wx.EXPAND, 10)
-        sizer.Add(ok_button, 0, wx.ALL | wx.ALIGN_CENTER, 5)
-
-        panel.SetSizer(sizer)
-        dlg.Fit()
-        dlg.ShowModal()
-        dlg.Destroy()
+        if hasattr(self, 'description') and self.description:
+             desc_dlg = DescriptionDialog(self, "Video description", self.description)
+             desc_dlg.ShowModal()
+             desc_dlg.Destroy()
+        else:
+            wx.MessageBox("Description is not available for this video.", "Description Unavailable", wx.OK | wx.ICON_INFORMATION)
 
     def on_show_comments(self, event):
         downloader = YoutubeCommentDownloader()
@@ -622,20 +610,22 @@ class YoutubePlayer(wx.Frame):
         else:
             wx.MessageBox("Could not access clipboard.", "Error", wx.OK | wx.ICON_ERROR)
 
-    def on_download_from_menu(self, event, is_audio):
-        self.download(self.youtube_url, self.title, is_audio)
+    def on_download_menu_item(self, event):
+         if not self.youtube_url:
+             wx.MessageBox("No YouTube video loaded.", "Error", wx.OK | wx.ICON_INFORMATION)
+             return
 
-    def download(self, url, title, is_audio):
-        try:
-            with wx.DirDialog(self, "Choose download directory", style=wx.DD_DEFAULT_STYLE) as dialog:
-                if dialog.ShowModal() == wx.ID_OK:
-                    download_path = dialog.GetPath()
-                    download_dlg = DownloadDialog(self, f"Downloading {'Audio' if is_audio else 'Video'}: {title}", is_audio)
-                    download_dlg.download_task(url, title, download_path)
-                else:
-                    return
-        except Exception as e:
-            wx.MessageBox(f"Could not start download: {e}", "Error", wx.OK | wx.ICON_ERROR)
+         settings_dialog = DownloadSettingsDialog(self, "Download Settings", self.title, self.youtube_url)
+         if settings_dialog.ShowModal() == wx.ID_OK:
+             download_settings = settings_dialog.settings
+             self.start_download_process(download_settings)
+         settings_dialog.Destroy()
+
+    def start_download_process(self, download_settings):
+        """Starts the DownloadDialog with the collected settings."""
+        dlg_title = f"Downloading: {download_settings['filename']}"
+        download_dlg = DownloadDialog(self, dlg_title, download_settings)
+        download_dlg.download_task()
 
 
     def OnClose(self, event):
