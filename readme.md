@@ -83,6 +83,8 @@ Please help me by reporting bugs and leaving your feedback thrugh the following 
 
 [Telegram: Diamond Star](https://t.me/diamondStar35)
 
+[Official telegram group](https://t.me/access_hub_discussion)
+
 [WhatsApp](https://wa.me/201067573360)
 
 [Email](mailto:ramymaherali55@gmail.com)
