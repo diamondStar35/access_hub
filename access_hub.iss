@@ -2,7 +2,7 @@
 ; SEE THE DOCUMENTATION FOR DETAILS ON CREATING INNO SETUP SCRIPT FILES!
 
 #define MyAppName "AccessHub"
-#define MyAppVersion "0.0.1b"
+#define MyAppVersion "0.0.3b"
 #define MyAppPublisher "Diamond Star"
 #define MyAppURL "https://github.com/diamondStar35/access_hub"
 #define MyAppExeName "AccessHub.exe"
@@ -65,6 +65,7 @@ Name: "turkish"; MessagesFile: "compiler:Languages\Turkish.isl"
 Name: "ukrainian"; MessagesFile: "compiler:Languages\Ukrainian.isl"
 
 [Tasks]
+Name: "associate"; Description: "Associate xml and json files with AccessHub"; GroupDescription: "File Associations"; Flags: checked
 Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{cm:AdditionalIcons}"; Flags: unchecked
 
 [Files]
@@ -77,7 +78,22 @@ Name: "{group}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"
 Name: "{autodesktop}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; Tasks: desktopicon
 Name: "{group}\Website"; Filename: "{userdesktop}\AccessHub.url"; Parameters: "{#MyAppURL}"; IconFilename: "{app}\{#MyAppExeName}"
 Name: "{group}\{#MyAppName} Help"; Filename: "{app}\readme.html"; Parameters: ""; IconFilename: "{app}\{#MyAppExeName}"
+Name: "{group}\Recent changes"; Filename: "{sys}\notepad.exe"; Parameters: """{app}\changelog.txt"""; IconFilename: "{app}\{#MyAppExeName}"
 
 [Run]
 Filename: "{app}\{#MyAppExeName}"; Description: "{cm:LaunchProgram,{#StringChange(MyAppName, '&', '&&')}}"; Flags: nowait postinstall skipifsilent
 
+[Registry]
+; XML file type association
+Root: HKCU; Subkey: "Software\Classes\.xml"; ValueType: string; ValueData: "AccessHub.xml"; Flags: uninsdeletevalue; Tasks: associate
+Root: HKCU; Subkey: "Software\Classes\AccessHub.xml"; ValueType: string; ValueData: "XML File (AccessHub)"; Tasks: associate
+Root: HKCU; Subkey: "Software\Classes\AccessHub.xml\shell\open\command"; ValueType: string; ValueData: """{app}\{#MyAppExeName}"" ""%1"""; Tasks: associate
+Root: HKCU; Subkey: "Software\Classes\AccessHub.xml\DefaultIcon"; ValueType: string; ValueData: """{app}\{#MyAppExeName}"",0"; Tasks: associate
+Root: HKCU; Subkey: "Software\Classes\AccessHub.xml"; Flags: deletekey uninsdeletekey
+
+; JSON file type association
+Root: HKCU; Subkey: "Software\Classes\.json"; ValueType: string; ValueData: "AccessHub.json"; Flags: uninsdeletevalue; Tasks: associate
+Root: HKCU; Subkey: "Software\Classes\AccessHub.json"; ValueType: string; ValueData: "JSON File (AccessHub)"; Tasks: associate
+Root: HKCU; Subkey: "Software\Classes\AccessHub.json\shell\open\command"; ValueType: string; ValueData: """{app}\{#MyAppExeName}"" ""%1"""; Tasks: associate
+Root: HKCU; Subkey: "Software\Classes\AccessHub.json\DefaultIcon"; ValueType: string; ValueData: """{app}\{#MyAppExeName}"",0"; Tasks: associate
+Root: HKCU; Subkey: "Software\Classes\AccessHub.json"; Flags: deletekey uninsdeletekey

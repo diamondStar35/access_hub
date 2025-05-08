@@ -12,11 +12,12 @@ from tools.network_player.media_player import DirectLinkPlayer, EVT_VLC_READY
 from tools.network_player.youtube_search import YoutubeSearchDialog
 from tools.network_player.youtube_streamer import YoutubeStreamer
 from tools.network_player.settings import YoutubeSettings
-from tools.task_scheduler import TaskScheduler
+from tools.task_scheduler.task_scheduler import TaskScheduler
 from tools.eleven_labs.eleven_labs import ElevenLabs, ElevenLabsSettings
 from tools.accessible_terminal.session_viewer import SessionViewer
 from tools.speed_test import SpeedTest
 from tools.online_tts.online_tts import OnlineTTS
+from tools.file_utils.file_tools import FileTools
 from tools.updater import Updater
 from speech import speak
 from passwordmeter import test
@@ -78,10 +79,11 @@ class AccessHub(wx.Frame):
             ("Accessible SSH Terminal", "Connect to SSH servers accessibly.", self.on_ssh_terminal),
             ("Internet Speed Test", "Measure your internet connection speed.", self.on_speed_test),
             ("Online Text to Speech", "Convert text to speech using online services.", self.on_online_tts),
+            ("File Tools", "Access file management utilities.", self.on_file_tools),
         ]
 
         self.child_frames = [] # List to store child frames
-        self.task_scheduler = None
+        self.task_scheduler_instance = TaskScheduler(self)
         self.is_recording = False
         self.audio_frames = []
         self.p = pyaudio.PyAudio()
@@ -567,17 +569,17 @@ class AccessHub(wx.Frame):
         self.manage_main_window_visibility(self.network_player)
 
     def on_task_scheduler(self, event):
-        if self.task_scheduler is None:  # Create only if it doesn't exist
-            self.task_scheduler = TaskScheduler(self)
-            self.task_scheduler.Bind(wx.EVT_CLOSE, self.on_task_scheduler_close)
-            self.add_child_frame(self.task_scheduler)
-        self.manage_main_window_visibility(self.task_scheduler)
-        self.task_scheduler.Show()
-        self.task_scheduler.Raise()
+        if self.task_scheduler_instance is None: 
+            self.task_scheduler_instance = TaskScheduler(self)
+            self.task_scheduler_instance.Bind(wx.EVT_CLOSE, self.on_task_scheduler_close)
+            self.add_child_frame(self.task_scheduler_instance)
+        self.manage_main_window_visibility(self.task_scheduler_instance)
+        self.task_scheduler_instance.Show()
+        self.task_scheduler_instance.Raise()
 
     def on_task_scheduler_close(self, event):
-        if self.task_scheduler:
-            self.task_scheduler.Hide()
+        if self.task_scheduler_instance:
+            self.task_scheduler_instance.Hide()
             event.Veto()
 
     def on_elevenlabs(self, event):
@@ -604,6 +606,13 @@ class AccessHub(wx.Frame):
         self.manage_main_window_visibility(online_tts_frame)
         online_tts_frame.Show()
 
+    def on_file_tools(self, event):
+        """Opens the File Tools selection frame."""
+        file_tools_frame = FileTools(self, title="File Tools")
+        self.add_child_frame(file_tools_frame)
+        self.manage_main_window_visibility(file_tools_frame)
+        file_tools_frame.Show()
+
     def on_settings(self, event):
         settings_dialog = SettingsDialog(self)
         settings_dialog.add_category(GeneralSettingsPanel)
@@ -616,7 +625,17 @@ class AccessHub(wx.Frame):
 
     def on_quit(self, event):
         """Handles the Quit menu item."""
+        if self.task_scheduler_instance:
+            try:
+                self.task_scheduler_instance.Close(force=True)
+            except wx.wxAssertionError:
+                pass 
+            except RuntimeError:
+                pass
+
         self.close_all_children()
+        self.tbIcon.RemoveIcon()
+        self.tbIcon.Destroy()
         wx.Exit()
 
     def on_about(self, event):
@@ -680,8 +699,17 @@ class AccessHub(wx.Frame):
             self.Hide()
             event.Veto()
         else:
+            if self.task_scheduler_instance:
+                try:
+                    self.task_scheduler_instance.Close(force=True)
+                except Exception:
+                    pass
             self.close_all_children()
-            wx.Exit()
+            if self.tbIcon:
+                self.tbIcon.RemoveIcon()
+                self.tbIcon.Destroy()
+            self.Destroy()
+            wx.CallAfter(wx.GetApp().ExitMainLoop)
 
 
 class AccessTaskBarIcon(wx.adv.TaskBarIcon):
@@ -940,6 +968,8 @@ class AboutDialog(wx.Dialog):
 
 if __name__ == "__main__":
     app = wx.App()
+    app.SetAppName(app_vars.app_name)
+    app.SetVendorName(app_vars.developer)
     # Single instance check
     instance_checker = wx.SingleInstanceChecker("AccessHubLock")
     if instance_checker.IsAnotherRunning():
