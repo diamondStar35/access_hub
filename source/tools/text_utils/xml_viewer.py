@@ -10,8 +10,8 @@ ID_ADD_CHILD = wx.NewIdRef()
 
 
 class XMLViewer(wx.Frame):
-    def __init__(self, *args, **kw):
-        super(XMLViewer, self).__init__(*args, **kw)
+    def __init__(self, parent, title):
+        super(XMLViewer, self).__init__(parent, id=wx.ID_ANY, title=title)
         self.current_file_path = None
         self.xml_tree = None
         self.root_element = None

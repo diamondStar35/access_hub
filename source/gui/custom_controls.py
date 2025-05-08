@@ -50,3 +50,39 @@ class CustomSlider(wx.Slider):
 
         self.SetValue(new_value)
 
+
+class CustomVirtualList(wx.ListCtrl):
+    """
+    A wx.ListCtrl in virtual mode to efficiently display large datasets.
+    It expects a data_source (e.g., a list of tuples) and a function
+    to retrieve text for a given row and column from that data_source.
+    """
+    def __init__(self, parent, id=wx.ID_ANY, pos=wx.DefaultPosition, size=wx.DefaultSize, 
+                 style=wx.LC_REPORT | wx.LC_SINGLE_SEL | wx.LC_VRULES | wx.LC_VIRTUAL, 
+                 validator=wx.DefaultValidator, name=wx.ListCtrlNameStr):
+        super(CustomVirtualList, self).__init__(parent, id, pos, size, style, validator, name)
+        self.data = []
+        self._item_text_retriever = None
+
+    def SetDataSource(self, data, item_text_retriever):
+        """
+        Sets the data source and the function to retrieve text for items.
+        :param data: The list of data items.
+        :param item_text_retriever: A function f(data_item, col_index) -> str
+                                    or f(data_list, row_index, col_index) -> str
+        """
+        self.data = data
+        self._item_text_retriever = item_text_retriever
+        self.SetItemCount(len(self.data))
+        if len(self.data) > 0: # Refresh if data is set
+            self.RefreshItems(0, len(self.data) - 1)
+
+    def OnGetItemText(self, item_idx, col_idx):
+        """
+        Called by wx.ListCtrl to get the text for a specific cell.
+        """
+        if self._item_text_retriever:
+            # The retriever function is expected to handle accessing self.data[item_idx]
+            # and returning the correct string for the column.
+            return self._item_text_retriever(item_idx, col_idx)
+        return ""

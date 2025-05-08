@@ -27,8 +27,8 @@ class HTMLStripper(html.parser.HTMLParser):
 
 
 class TextCleaner(wx.Frame):
-    def __init__(self, *args, **kw):
-        super(TextCleaner, self).__init__(*args, **kw)
+    def __init__(self, parent, title):
+        super(TextCleaner, self).__init__(parent, id=wx.ID_ANY, title=title)
         self.file_list = []
         self.SetBackgroundColour(wx.Colour(240, 240, 240))
         self.InitUI()

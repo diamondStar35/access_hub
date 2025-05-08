@@ -194,108 +194,133 @@ class TextUtilitiesApp(wx.Frame):
     def __init__(self, *args, **kw):
         super(TextUtilitiesApp, self).__init__(*args, **kw)
         self.child_frames = []
-        self.split_frame = None
-        self.capitalize_frame = None
-        self.text_info_frame = None
-        self.json_viewer_frame = None
-        self.text_cleaner_frame = None
-        self.advanced_finder_frame = None
+        self.text_tools_list = [
+            ("Split Text", "Split text by character count, lines, or words.", self.OnSplit),
+            ("Text Info", "Get information like line, word, and character count.", self.OnTextInfo),
+            ("Advanced Finder", "Find and replace text with advanced options.", self.OnAdvancedFinder),
+            ("Text Cleaner", "Clean text by removing extra spaces, empty lines, etc.", self.OnTextCleaner),
+            ("Capitalize Text", "Capitalize the first letter of each line.", self.OnCapitalizeText),
+            ("JSON Viewer", "View and format JSON data.", self.OnJsonViewer),
+            ("XML Viewer", "View and navigate XML data.", self.OnXMLViewer)
+        ]
         self.InitUI()
 
     def InitUI(self):
         panel = wx.Panel(self)
+        self.SetBackgroundColour(wx.Colour(240, 240, 240))
+        panel.SetBackgroundColour(wx.Colour(230, 230, 230))
 
-        grid_sizer = wx.GridBagSizer(5, 5) # 5px gaps
-        buttons_data = [
-            ("Split Text", self.OnSplit),
-            ("Text Info", self.OnTextInfo),
-            ("Advanced Finder", self.OnAdvancedFinder),
-            ("Text Cleaner", self.OnTextCleaner),
-            ("Capitalize Text", self.OnCapitalizeText),
-            ("JSON Viewer", self.OnJsonViewer),
-            ("XML Viewer", self.OnXMLViewer)
-        ]
-
-        cols = 3 # Number of buttons per row
-        row, col = 0, 0
-        for label, handler in buttons_data:
-            btn = wx.Button(panel, label=label, size=(150, 30))
-            btn.Bind(wx.EVT_BUTTON, handler)
-            grid_sizer.Add(btn, pos=(row, col), flag=wx.ALL, border=5)
-            col += 1
-            if col >= cols:
-                col = 0
-                row += 1
-        
         vbox = wx.BoxSizer(wx.VERTICAL)
-        vbox.AddStretchSpacer()
-        vbox.Add(grid_sizer, 0, wx.ALIGN_CENTER | wx.ALL, 10)
-        vbox.AddStretchSpacer()
-        panel.SetSizer(vbox)
+        title_text = wx.StaticText(panel, label="Text Utilities", style=wx.ALIGN_CENTER)
+        title_font = title_text.GetFont()
+        title_font.PointSize += 4
+        title_font = title_font.Bold()
+        title_text.SetFont(title_font)
+        vbox.Add(title_text, 0, wx.ALL | wx.EXPAND, 15)
 
-        self.SetSize((550, 250 + (row * 40))) # Adjust height based on rows
+        self.tool_list_ctrl = wx.ListCtrl(panel, style=wx.LC_REPORT | wx.LC_SINGLE_SEL | wx.LC_VRULES | wx.LC_HRULES)
+        self.tool_list_ctrl.SetFont(wx.Font(10, wx.FONTFAMILY_SWISS, wx.FONTSTYLE_NORMAL, wx.FONTWEIGHT_NORMAL))
+        self.tool_list_ctrl.SetBackgroundColour(wx.Colour(250, 250, 250))
+
+        self.tool_list_ctrl.InsertColumn(0, "Tool Name", width=180)
+        self.tool_list_ctrl.InsertColumn(1, "Description", width=320)
+
+        for index, (name, description, _) in enumerate(self.text_tools_list):
+            list_index = self.tool_list_ctrl.InsertItem(index, name)
+            self.tool_list_ctrl.SetItem(list_index, 1, description)
+            self.tool_list_ctrl.SetItemData(list_index, index)
+
+        self.tool_list_ctrl.Bind(wx.EVT_LIST_ITEM_ACTIVATED, self.on_run_selected_tool)
+        vbox.Add(self.tool_list_ctrl, 1, wx.EXPAND | wx.LEFT | wx.RIGHT | wx.BOTTOM, 10)
+
+        btn_sizer = wx.BoxSizer(wx.HORIZONTAL)
+        run_button = wx.Button(panel, label="Run Tool")
+        run_button.Bind(wx.EVT_BUTTON, self.on_run_selected_tool)
+        btn_sizer.Add(run_button, 0, wx.ALL, 5)
+
+        back_button = wx.Button(panel, label="Go Back (Close)")
+        back_button.Bind(wx.EVT_BUTTON, lambda event: self.Close())
+        btn_sizer.Add(back_button, 0, wx.ALL, 5)
+        vbox.Add(btn_sizer, 0, wx.ALIGN_CENTER | wx.BOTTOM, 10)
+        
+        panel.SetSizer(vbox)
+        self.SetSize((550, 400))
         self.SetTitle('Text Utilities')
         self.Centre()
-        self.Bind(wx.EVT_CLOSE, self.on_close)
+        self.Bind(wx.EVT_CLOSE, self.on_main_close)
 
 
-    def on_close(self, event):
+    def on_run_selected_tool(self, event):
+        """Handles running the tool selected in the list control."""
+        selected_idx = self.tool_list_ctrl.GetFirstSelected()
+        if selected_idx != -1:
+            tool_data_index = self.tool_list_ctrl.GetItemData(selected_idx)
+            _, _, handler_method = self.text_tools_list[tool_data_index]
+            if callable(handler_method):
+                handler_method(event)
+            else:
+                wx.MessageBox("Error: No valid action found for selected tool.", "Error", wx.OK | wx.ICON_ERROR, self)
+
+    def on_main_close(self, event):
+        """Handles closing the main TextUtilitiesApp window."""
         for frame in list(self.child_frames):
             if frame:
                 try:
                     frame.Close()
-                except wx.PyDeadObjectError: # Frame might have been closed already
-                    if frame in self.child_frames:
-                         self.child_frames.remove(frame)
+                except (wx.PyDeadObjectError, RuntimeError):
+                    pass # Frame might have been closed already
+        self.child_frames.clear()
         event.Skip()
 
-    def on_child_close(self, event, frame):
-        if frame in self.child_frames:
-            self.child_frames.remove(frame)
-        event.Skip()
+    def _launch_sub_tool(self, frame_class, title):
+        """Helper to launch a sub-tool, manage visibility, and track child frame."""
+        sub_tool_frame = frame_class(self, title=title)
+        self.add_child_frame(sub_tool_frame)
+        self.Hide()
+        sub_tool_frame.Show()
+        return sub_tool_frame
 
 
     def OnCapitalizeText(self, event):
-        self.capitalize_frame = CapitalizeFrame(None, title='Capitalize Text')
-        self.capitalize_frame.Show()
-        self.add_child_frame(self.capitalize_frame)
+        self._launch_sub_tool(CapitalizeFrame, 'Capitalize Text')
 
     def OnSplit(self, event):
-        self.split_frame = TextSplitterFrame(None, title='Text Splitter')
-        self.split_frame.Show()
-        self.add_child_frame(self.split_frame)
+        self._launch_sub_tool(TextSplitterFrame, 'Text Splitter')
 
     def OnTextInfo(self, event):
-        self.text_info_frame = TextInfoFrame(None, title='Text Info')
-        self.text_info_frame.Show()
-        self.add_child_frame(self.text_info_frame)
+        self._launch_sub_tool(TextInfoFrame, 'Text Info')
 
-    def OnAdvancedFinder(self, event): # New method
-        self.advanced_finder_frame = AdvancedFinder(self, title='Advanced Finder')
-        self.add_child_frame(self.advanced_finder_frame)
-        self.advanced_finder_frame.Show()
+    def OnAdvancedFinder(self, event):
+        self.advanced_finder_frame = self._launch_sub_tool(lambda parent, title: AdvancedFinder(parent, title), 'Advanced Finder')
         self.advanced_finder_frame.Raise()
 
     def OnJsonViewer(self, event):
-        self.json_viewer_frame = JsonViewer(None, title='JSON Viewer')
-        self.add_child_frame(self.json_viewer_frame)
-        self.json_viewer_frame.Show()
+        self._launch_sub_tool(JsonViewer, 'JSON Viewer')
 
     def OnTextCleaner(self, event):
-        self.text_cleaner_frame = TextCleaner(self, title='Text Cleaner')
-        self.add_child_frame(self.text_cleaner_frame)
-        self.text_cleaner_frame.Show()
+        self.text_cleaner_frame = self._launch_sub_tool(lambda parent, title: TextCleaner(parent, title), 'Text Cleaner')
 
     def OnXMLViewer(self, event):
-        self.xml_viewer_frame = XMLViewer(self, title='XML Viewer')
-        self.add_child_frame(self.xml_viewer_frame)
-        self.xml_viewer_frame.Show()
+        self.xml_viewer_frame = self._launch_sub_tool(lambda parent, title: XMLViewer(parent, title), 'XML Viewer')
         self.xml_viewer_frame.Raise()
-
 
     def add_child_frame(self, frame):
         self.child_frames.append(frame)
-        frame.Bind(wx.EVT_CLOSE, lambda event, f=frame: self.on_child_close(event, f))
+        frame.Bind(wx.EVT_CLOSE, lambda event, f=frame: self.on_child_tool_close(event, f))
+
+    def on_child_tool_close(self, event, frame_being_closed):
+        """Called when a sub-tool (child frame) is closed."""
+        if frame_being_closed in self.child_frames:
+            self.child_frames.remove(frame_being_closed)
+        
+        if self.IsShown():
+            pass
+        elif not self.child_frames:
+             self.Show()
+             self.Raise()
+        
+        if event.GetEventObject() == frame_being_closed:
+            frame_being_closed.Destroy()
 
 
 class TextInfoFrame(wx.Frame):
