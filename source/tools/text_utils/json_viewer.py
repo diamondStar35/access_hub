@@ -3,7 +3,7 @@ import wx.adv
 import json
 import os
 from gui.dialogs import MultilineTextEditDialog
-from speech import speak # Uncomment if speak is used
+from speech import speak
 
 
 class NewElementDialog(wx.Dialog):
@@ -46,7 +46,7 @@ class NewElementDialog(wx.Dialog):
 
 
 class JsonViewer(wx.Frame):
-    def __init__(self, *args, **kw):
+    def __init__(self, *args, filepath=None, **kw):
         super(JsonViewer, self).__init__(*args, **kw)
         self.json_data = None
         self.original_json_data = None
@@ -55,9 +55,25 @@ class JsonViewer(wx.Frame):
         self.InitUI()
         self.Bind(wx.EVT_CLOSE, self.OnClose)
 
+        if filepath and os.path.exists(filepath):
+            self.LoadJsonFile(filepath)
+        elif filepath: # Filepath provided but doesn't exist
+            wx.CallAfter(wx.MessageBox, f"File not found: {filepath}", "Error", wx.OK | wx.ICON_ERROR, self)
+            self._reset_state()
+
+
     @property
     def is_dirty(self):
-        return json.dumps(self.json_data, sort_keys=True) != json.dumps(self.original_json_data, sort_keys=True)
+        if self.json_data is None and self.original_json_data is None:
+            return False
+        if self.json_data is None or self.original_json_data is None:
+            return True # One is None, the other isn't, so they are different
+
+        try:
+            return json.dumps(self.json_data, sort_keys=True, ensure_ascii=False) != \
+                   json.dumps(self.original_json_data, sort_keys=True, ensure_ascii=False)
+        except TypeError:
+            return True
 
     def InitUI(self):
         panel = wx.Panel(self)
@@ -269,7 +285,6 @@ class JsonViewer(wx.Frame):
              if isinstance(self.json_data, (dict, list)):
                  self.new_element_btn.Enable(True)
              else:
-                 # Simple value root
                  self.modify_btn.Enable(True)
 
         self.save_btn.Enable(self.json_data is not None and self.is_dirty)
@@ -284,12 +299,8 @@ class JsonViewer(wx.Frame):
             return None
 
     def _set_value_at_path(self, data, path, value):
-        if not path: # Attempting to set root value
-             # This case is tricky; depends on how root is handled.
-             # In this tree structure, root modification is effectively replacing json_data.
-             # But _set_value_at_path expects a path to a child.
-             # Handle this case separately if needed, or assume path is never empty here.
-             return False # Path must not be empty for nested setting
+        if not path:
+             return False
 
         try:
             current = data
@@ -325,7 +336,7 @@ class JsonViewer(wx.Frame):
             if selected_tree_item and selected_tree_item.IsOk():
                  path = self.json_tree.GetItemData(selected_tree_item)
 
-                 if path is None: # Root node representing dict/list or simple value root
+                 if path is None:
                       if self.json_data is not None:
                           # If root data is simple value, the path [] refers to the value itself
                           if not isinstance(self.json_data, (dict, list)):
@@ -381,40 +392,33 @@ class JsonViewer(wx.Frame):
             wx.MessageBox("Please select an element to modify.", "No Selection", wx.OK | wx.ICON_WARNING, parent=self)
             return
 
-        # You can only modify a simple value leaf or a listbox item
-        is_tree_value_leaf = (source == 'tree' and not isinstance(current_value, (dict, list)) and path != []) or (source == 'tree' and path == [] and not isinstance(current_value, (dict, list))) # Simple value root case
+        is_tree_value_leaf = (source == 'tree' and not isinstance(current_value, (dict, list)) and path != []) or (source == 'tree' and path == [] and not isinstance(current_value, (dict, list)))
         is_listbox_item = source == 'listbox'
 
         if not is_tree_value_leaf and not is_listbox_item:
              wx.MessageBox("Cannot modify this type of element. Select a simple value in the tree or an item in the listbox.", "Modification Error", wx.OK | wx.ICON_WARNING, parent=self)
              return
 
-
-        # Use the MultilineTextEditDialog
         with MultilineTextEditDialog(self, f"Modify Value for '{display_text}'", repr(current_value)) as dlg:
             if dlg.ShowModal() == wx.ID_OK:
                 new_value_str = dlg.GetValue()
                 try:
-                    new_value = eval(new_value_str) # Use eval with caution
+                    new_value = eval(new_value_str)
 
                     if source == 'listbox':
-                         # Modify item in the listbox's parent list
                          list_path, item_index = self.list_items_listbox.GetClientData(self.list_items_listbox.GetSelection())
                          list_data = self._navigate_path(self.json_data, list_path)
                          if list_data is not None and isinstance(list_data, list) and 0 <= item_index < len(list_data):
                               list_data[item_index] = new_value
                               self.is_dirty = True
-                              # Refresh the entire tree and listbox to reflect potential type changes
                               self.DisplayJsonInTree()
                               speak("Element modified.")
                          else:
                               wx.MessageBox("Could not find the parent list to modify.", "Modification Error", wx.OK | wx.ICON_ERROR, parent=self)
 
                     elif source == 'tree':
-                         # Modify item in the tree's location (must be a simple value leaf or simple root)
-                         # If it's the root simple value, path is []
                          if path == []:
-                             self.json_data = new_value # Replace root data
+                             self.json_data = new_value
                              self.is_dirty = True
                              self.DisplayJsonInTree()
                              speak("Root value modified.")

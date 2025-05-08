@@ -10,7 +10,7 @@ ID_ADD_CHILD = wx.NewIdRef()
 
 
 class XMLViewer(wx.Frame):
-    def __init__(self, parent, title):
+    def __init__(self, parent, title, filepath=None):
         super(XMLViewer, self).__init__(parent, id=wx.ID_ANY, title=title)
         self.current_file_path = None
         self.xml_tree = None
@@ -20,6 +20,14 @@ class XMLViewer(wx.Frame):
         self.InitUI()
         self.UpdateTitle()
         self._update_button_states()
+
+        if filepath and os.path.exists(filepath):
+            self.LoadFile(filepath)
+        elif filepath: # Filepath provided but doesn't exist
+            wx.CallAfter(wx.MessageBox, f"File not found: {filepath}", "Error", wx.OK | wx.ICON_ERROR, self)
+            self.UpdateTitle()
+            self._update_button_states()
+
 
     def InitUI(self):
         """Initializes the user interface components of the frame."""
@@ -89,6 +97,29 @@ class XMLViewer(wx.Frame):
         self.Bind(wx.EVT_MENU, self.OnAddElementAsChild, id=ID_ADD_CHILD)
 
 
+    def LoadFile(self, path):
+        """Loads and parses the XML file from the given path."""
+        self.current_file_path = path
+        try:
+            self.xml_tree = ET.parse(self.current_file_path)
+            self.root_element = self.xml_tree.getroot()
+            self.PopulateTreeCtrl()
+            self._update_xml_display()
+            self.unsaved_changes = False
+        except ParseError as e:
+            wx.MessageBox(f"Error parsing XML file:\n{e}", "Parse Error", wx.OK | wx.ICON_ERROR, parent=self)
+            self.current_file_path = None
+            self.xml_tree = None
+            self.root_element = None
+            self.tree_ctrl.DeleteAllItems()
+            self.xml_display_ctrl.Clear()
+        except Exception as e:
+            wx.MessageBox(f"An unexpected error occurred while opening file:\n{e}", "Error", wx.OK | wx.ICON_ERROR, parent=self)
+            self.current_file_path = None
+        finally:
+            self.UpdateTitle()
+            self._update_button_states()
+
     def UpdateTitle(self):
         """Updates the window title based on the current file and unsaved changes status."""
         title = "XML Viewer"
@@ -132,7 +163,7 @@ class XMLViewer(wx.Frame):
             ret = wx.MessageBox("You have unsaved changes. Would you like to Save them before opening a new file?",
                                 "Unsaved Changes", wx.YES_NO | wx.CANCEL | wx.ICON_QUESTION)
             if ret == wx.YES:
-                if not self.OnSaveFile(event): 
+                if not self.OnSaveFile(event):
                     return
             elif ret == wx.CANCEL:
                 return
@@ -141,25 +172,8 @@ class XMLViewer(wx.Frame):
                            style=wx.FD_OPEN | wx.FD_FILE_MUST_EXIST) as fileDialog:
             if fileDialog.ShowModal() == wx.ID_CANCEL:
                 return
-            self.current_file_path = fileDialog.GetPath()
-            try:
-                self.xml_tree = ET.parse(self.current_file_path)
-                self.root_element = self.xml_tree.getroot()
-                self.PopulateTreeCtrl()
-                self._update_xml_display()
-                self.unsaved_changes = False
-            except ParseError as e:
-                wx.MessageBox(f"Error parsing XML file:\n{e}", "Parse Error", wx.OK | wx.ICON_ERROR)
-                self.current_file_path = None
-                self.xml_tree = None
-                self.root_element = None
-                self.tree_ctrl.DeleteAllItems()
-                self.xml_display_ctrl.Clear()
-            except Exception as e:
-                wx.MessageBox(f"An unexpected error occurred while opening file:\n{e}", "Error", wx.OK | wx.ICON_ERROR)
-                self.current_file_path = None 
-            self.UpdateTitle()
-            self._update_button_states()
+            path = fileDialog.GetPath()
+            self.LoadFile(path)
 
     def _get_element_display_string(self, element):
         """
@@ -448,4 +462,4 @@ class XMLViewer(wx.Frame):
             elif ret == wx.CANCEL:
                 event.Veto()
                 return
-        self.Destroy()
+        event.Skip()

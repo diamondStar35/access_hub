@@ -7,6 +7,8 @@ import webbrowser
 import app_vars
 from gui.settings import SettingsDialog, GeneralSettingsPanel
 from tools.text_utils.text_utils import TextUtilitiesApp
+from tools.text_utils.json_viewer import JsonViewer
+from tools.text_utils.xml_viewer import XMLViewer
 from tools.shutdown_control import ShutdownControl
 from tools.network_player.media_player import DirectLinkPlayer, EVT_VLC_READY
 from tools.network_player.youtube_search import YoutubeSearchDialog
@@ -67,8 +69,10 @@ def get_keyboard_language():
         return f"Language ID: {language_id} (0x{language_id:X})"  # Fallback: Show ID
 
 class AccessHub(wx.Frame):
-    def __init__(self, parent, title):
+    def __init__(self, parent, title, launched_for_file=False):
         super(AccessHub, self).__init__(parent, title=title, size=(800, 600))
+        self.launched_for_file = launched_for_file
+        self.direct_file_viewer_frame = None
         self.tools_list = [
             ("Text Tools", "Manipulate and analyze text content.", self.on_text_utilities),
             ("Task Scheduler", "Schedule tasks to run automatically.", self.on_task_scheduler),
@@ -544,6 +548,28 @@ class AccessHub(wx.Frame):
         if icon == wx.ICON_ERROR: title = "yt-dlp Update Failed"
         wx.MessageBox(message, title, wx.OK | icon, parent=self)
 
+    def open_file_in_viewer(self, filepath):
+        if not filepath or not os.path.exists(filepath):
+            if self.launched_for_file:
+                wx.MessageBox(f"File not found: {filepath}\nAccessHub will now exit.", "Error", wx.OK | wx.ICON_ERROR)
+                wx.CallAfter(self.perform_app_exit)
+            return
+
+        _, ext = os.path.splitext(filepath.lower())
+        viewer_frame = None
+        if ext == ".json":
+            viewer_frame = JsonViewer(self, title=f"JSON Viewer - {os.path.basename(filepath)}", filepath=filepath)
+        elif ext == ".xml":
+            viewer_frame = XMLViewer(self, title=f"XML Viewer - {os.path.basename(filepath)}", filepath=filepath)
+        if viewer_frame:
+            if self.launched_for_file:
+                self.direct_file_viewer_frame = viewer_frame
+            self.add_child_frame(viewer_frame)
+            viewer_frame.Show()
+        elif self.launched_for_file:
+            wx.MessageBox(f"Unsupported file type: {ext}\nAccessHub will now exit.", "Cannot Open File", wx.OK | wx.ICON_WARNING, None)
+            wx.CallAfter(self.perform_app_exit)
+
     def on_text_utilities(self, event):
         text_utils_app = TextUtilitiesApp(None, title="Text Utilities")
         self.add_child_frame(text_utils_app)
@@ -625,18 +651,7 @@ class AccessHub(wx.Frame):
 
     def on_quit(self, event):
         """Handles the Quit menu item."""
-        if self.task_scheduler_instance:
-            try:
-                self.task_scheduler_instance.Close(force=True)
-            except wx.wxAssertionError:
-                pass 
-            except RuntimeError:
-                pass
-
-        self.close_all_children()
-        self.tbIcon.RemoveIcon()
-        self.tbIcon.Destroy()
-        wx.Exit()
+        self.perform_app_exit()
 
     def on_about(self, event):
         about_dialog = AboutDialog(self, title=f"About {app_vars.app_name}")
@@ -679,6 +694,9 @@ class AccessHub(wx.Frame):
                 self.child_frames.remove(frame)
         except (ValueError, RunTimeError):
             pass  # Frame was already removed or destroyed
+
+        if self.launched_for_file and frame == self.direct_file_viewer_frame:
+            wx.CallAfter(self.perform_app_exit) # Schedule app exit
         event.Skip()
 
     def close_all_children(self):
@@ -689,6 +707,21 @@ class AccessHub(wx.Frame):
                 frame.Close()
             except RuntimeError:
                 pass
+
+    def perform_app_exit(self):
+        """Helper function to cleanly exit the application."""
+        if self.task_scheduler_instance:
+            try:
+                self.task_scheduler_instance.Close(force=True)
+            except wx.wxAssertionError:
+                pass 
+            except RuntimeError:
+                pass
+
+        self.close_all_children()
+        self.tbIcon.RemoveIcon()
+        self.tbIcon.Destroy()
+        wx.Exit()
 
     def OnClose(self, event):
         # Minimize to tray instead of closing, based on setting
@@ -970,11 +1003,31 @@ if __name__ == "__main__":
     app = wx.App()
     app.SetAppName(app_vars.app_name)
     app.SetVendorName(app_vars.developer)
+    filepath_to_open = None
+    launched_for_file_arg = False
+    if len(sys.argv) > 1:
+        file_path = sys.argv[1]
+        if os.path.exists(file_path) and os.path.isfile(file_path):
+             filepath_to_open = os.path.abspath(file_path)
+             launched_for_file_arg = True
+
     # Single instance check
-    instance_checker = wx.SingleInstanceChecker("AccessHubLock")
+    lock_name = f"{app_vars.app_name.replace(' ', '_')}_InstanceLock"
+    instance_checker = wx.SingleInstanceChecker(lock_name)
     if instance_checker.IsAnotherRunning():
-        wx.MessageBox("Another instance of Access Hub is already running.", "Instance Running", wx.OK | wx.ICON_WARNING)
-        wx.Exit()
-    frame = AccessHub(None, app_vars.app_name)
+        if filepath_to_open:
+            wx.MessageBox(f"AccessHub is already running.\n\nTo open '{os.path.basename(filepath_to_open)}', please open it from the app directly, or close the existing AccessHub instance first.",
+                "AccessHub Already Running",
+                wx.OK | wx.ICON_INFORMATION)
+        else:
+            wx.MessageBox("Another instance of Access Hub is already running.", "Instance Running", wx.OK | wx.ICON_WARNING)
+        sys.exit()
+
+    frame = AccessHub(None, app_vars.app_name, launched_for_file=launched_for_file_arg)
+    if filepath_to_open:
+        wx.CallAfter(frame.open_file_in_viewer, filepath_to_open)
+        frame.Show(False)
+    else:
+        frame.Show(True)
     frame.Bind(wx.EVT_CLOSE, frame.OnClose)
     app.MainLoop()
