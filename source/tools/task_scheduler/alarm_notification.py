@@ -77,9 +77,9 @@ class AlarmNotificationFrame(wx.Frame):
 
         btn_sizer = wx.BoxSizer(wx.HORIZONTAL)
         self.stop_btn = wx.Button(self.panel, label="Stop Alarm")
-        self.snooze_btn = wx.Button(self.panel, label=f"Snooze ({self.snooze_interval_min} min)")
+        self.snooze_btn = wx.Button(self.panel, label=f"Snooze")
 
-        self.stop_btn.Bind(wx.EVT_BUTTON, self.on_stop_alarm) # Reverted to original name
+        self.stop_btn.Bind(wx.EVT_BUTTON, self.on_stop_alarm)
         self.snooze_btn.Bind(wx.EVT_BUTTON, self.on_snooze_alarm) # Reverted to original name
         btn_sizer.Add(self.stop_btn, 1, wx.EXPAND | wx.LEFT | wx.RIGHT | wx.BOTTOM, 5)
         btn_sizer.Add(self.snooze_btn, 1, wx.EXPAND | wx.LEFT | wx.RIGHT | wx.BOTTOM, 5)
@@ -93,16 +93,37 @@ class AlarmNotificationFrame(wx.Frame):
         """Initializes VLC and starts playing in a separate thread."""
         try:
             self.vlc_instance = vlc.Instance("--no-xlib --quiet --input-repeat=-1")
-            self.media_player = self.vlc_instance.media_player_new()
+            if self.vlc_instance is None:
+                raise Exception("VLC Instance could not be created.")
             
             if not self.sound_path or not os.path.exists(self.sound_path):
                 wx.PostEvent(self, VlcReadyEvent(VLC_READY_EVENT_TYPE, self.GetId(), value="ERROR_NO_SOUND_FILE_IN_THREAD"))
                 return
 
             media = self.vlc_instance.media_new(self.sound_path)
-            self.media_player.set_media(media)
+            if media is None:
+                 raise Exception(f"VLC Media object could not be created for path: {self.sound_path}")
+
+            media_list = self.vlc_instance.media_list_new()
+            if media_list is None:
+                 raise Exception("VLC MediaList could not be created.")
+            media_list.add_media(media)
+
+            self.media_player = self.vlc_instance.media_list_player_new()
+            if self.media_player is None:
+                 raise Exception("VLC MediaListPlayer could not be created.")
+
+            # Set the media list and playback mode to loop
+            self.media_player.set_media_list(media_list)
+            self.media_player.set_playback_mode(vlc.PlaybackMode.loop)
+            # setting the volume
+            media_player = self.media_player.get_media_player()
+            media_player.audio_set_volume(90)
+
             self.media_player.play()
             self.is_playing = True
+            media.release()
+            media_list.release()
             wx.PostEvent(self, VlcReadyEvent(VLC_READY_EVENT_TYPE, self.GetId(), value="SUCCESS"))
         except Exception as e:
             wx.MessageBox(f"Error initializing VLC or playing sound:\n{e}", "VLC Playback Error", wx.OK | wx.ICON_ERROR, self)
@@ -115,7 +136,6 @@ class AlarmNotificationFrame(wx.Frame):
             self.Show()
             self.Raise()
             self.Iconize(False)
-            self.SetFocus()
             self.sound_duration_timer = wx.Timer(self)
             self.Bind(wx.EVT_TIMER, self.on_sound_timeout, self.sound_duration_timer)
             self.sound_duration_timer.StartOnce(self.max_play_seconds * 1000)
@@ -134,10 +154,14 @@ class AlarmNotificationFrame(wx.Frame):
         if self.sound_duration_timer and self.sound_duration_timer.IsRunning():
             self.sound_duration_timer.Stop()
         if self.media_player:
-            if self.media_player.is_playing():
-                self.media_player.stop()
-            self.media_player.release()
+            try:
+                if self.media_player.is_playing():
+                    self.media_player.stop()
+                self.media_player.release() 
+            except Exception as e:
+                pass
             self.media_player = None
+
         if self.vlc_instance:
             self.vlc_instance.release()
             self.vlc_instance = None

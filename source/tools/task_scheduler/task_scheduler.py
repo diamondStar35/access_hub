@@ -120,33 +120,62 @@ class TaskScheduler(wx.Frame):
 
     def _refresh_task_list_display(self):
         """Clears and repopulates the wx.ListCtrl from self.scheduled_tasks."""
-        self.task_list.DeleteAllItems()
+        self.task_list.DeleteAllItems()        
         # Sort tasks by their next run time for better readability
-        try:
-            # Create a temporary list of tasks with valid ISO run times for sorting
-            sortable_tasks = [t for t in self.scheduled_tasks if 'run_time_iso' in t]
-            sortable_tasks.sort(key=lambda t: datetime.datetime.fromisoformat(t['run_time_iso']))
-        except (TypeError, ValueError) as e:
-            sortable_tasks = self.scheduled_tasks
-
-        for task_data in sortable_tasks:
+        sortable_tasks = []
+        for t in self.scheduled_tasks:
             try:
-                run_time_dt = datetime.datetime.fromisoformat(task_data['run_time_iso'])
-                time_str = run_time_dt.strftime("%Y-%m-%d %I:%M:%S %p")
-            except (ValueError, KeyError):
-                time_str = "Invalid Time"
+                datetime.datetime.fromisoformat(t.get('run_time_iso'))
+                sortable_tasks.append(t)
+            except (ValueError, TypeError):
+                 pass
+
+        try:
+             sortable_tasks.sort(key=lambda t: datetime.datetime.fromisoformat(t['run_time_iso']))
+        except (TypeError, ValueError) as e:
+            sortable_tasks = [t for t in self.scheduled_tasks]
+
+        displayed_indices = set() # Keep track of original indices added to the list control
+        for task_data in sortable_tasks:
+            task_id_persistent = task_data.get('id', None)
+            if task_id_persistent is None:
+                 continue
+
+            try:
+                original_index_in_list = self.scheduled_tasks.index(task_data)
+            except ValueError:
+                 continue
+
+            if original_index_in_list in displayed_indices:
+                 continue
+
+            try:
+                run_time_dt = datetime.datetime.fromisoformat(task_data.get('run_time_iso'))
+                time_str = run_time_dt.strftime("%Y-%m-%d %I:%M:%S %p") # Show AM/PM
+            except (ValueError, KeyError, TypeError):
+                time_str = "Invalid Time" # Fallback for bad data
 
             display_details = task_data.get('details_str', 'N/A')
             task_name = task_data.get('name', 'Unnamed Task')
-            task_type = task_data.get('type', 'Unknown')            
-            task_id_persistent = task_data['id']
-
+            task_type = task_data.get('type', 'Unknown')
+            
             list_idx = self.task_list.GetItemCount()
             index = self.task_list.InsertItem(list_idx, task_name)
             self.task_list.SetItem(index, 1, task_type)
             self.task_list.SetItem(index, 2, time_str)
             self.task_list.SetItem(index, 3, display_details)
-            self.task_list.SetItemData(index, task_id_persistent)
+            self.task_list.SetItemData(index, original_index_in_list) 
+            displayed_indices.add(original_index_in_list)
+
+        for original_index, task_data in enumerate(self.scheduled_tasks):
+            if original_index not in displayed_indices:
+                 task_id_persistent = task_data.get('id', None)
+                 list_idx = self.task_list.GetItemCount()
+                 index = self.task_list.InsertItem(list_idx, task_data.get('name', 'Unnamed Task'))
+                 self.task_list.SetItem(index, 1, task_data.get('type', 'Unknown') + " (Error)")
+                 self.task_list.SetItem(index, 2, "N/A") # Time N/A if not sortable
+                 self.task_list.SetItem(index, 3, task_data.get('details_str', 'N/A') + " (Data Error)")
+                 self.task_list.SetItemData(index, original_index)
 
 
     def on_add_task_button_clicked(self, event):
@@ -527,22 +556,28 @@ class TaskScheduler(wx.Frame):
         finally:
             self.remove_task_by_id(task_id) # Ensure removal even if action fails
 
-
     def remove_task_by_id(self, task_id_to_remove):
         """Removes a task by its persistent ID."""
         task_to_remove = None
-        for task in self.scheduled_tasks:
-            if task['id'] == task_id_to_remove:
+        index_to_remove = -1
+        # Find the task in the list by its persistent ID
+        for i, task in enumerate(self.scheduled_tasks):
+            if task.get('id') == task_id_to_remove:
                 task_to_remove = task
+                index_to_remove = i
                 break
         
         if task_to_remove:
-            self.scheduled_tasks.remove(task_to_remove)
-            
+            if index_to_remove != -1:
+                 del self.scheduled_tasks[index_to_remove]
+            else:
+                 self.scheduled_tasks.remove(task_to_remove)
+
             if task_id_to_remove in self.timers:
                 timer = self.timers.pop(task_id_to_remove)
                 if timer.IsRunning():
-                    timer.Stop()            
+                    timer.Stop()
+
             self._save_tasks()
             self._refresh_task_list_display()
 
@@ -552,16 +587,14 @@ class TaskScheduler(wx.Frame):
             wx.MessageBox("Please select a task to remove.", "No Selection", wx.OK | wx.ICON_INFORMATION)
             return
 
-        task_id = self.task_list.GetItemData(selected_list_item_idx)
-        
-        # Find the task data by ID to get its name for the confirmation message
-        task_to_remove_data = None
-        for task in self.scheduled_tasks:
-             if task.get('id') == task_id:
-                  task_to_remove_data = task
-                  break
+        task_internal_idx = self.task_list.GetItemData(selected_list_item_idx)        
+        if 0 <= task_internal_idx < len(self.scheduled_tasks):
+            task_to_remove_data = self.scheduled_tasks[task_internal_idx]
+            task_id = task_to_remove_data.get('id') # Get the persistent ID from the task data
+            if task_id is None:
+                 wx.MessageBox("Error identifying selected task (missing ID). Please try again.", "Error", wx.OK | wx.ICON_ERROR, self)
+                 return
             
-        if task_to_remove_data:
             confirm_dlg = wx.MessageDialog(self, 
                                            f"Are you sure you want to remove the task '{task_to_remove_data.get('name', 'Unnamed Task')}'?",
                                            "Confirm Removal",
@@ -570,7 +603,8 @@ class TaskScheduler(wx.Frame):
                 self.remove_task_by_id(task_id)
             confirm_dlg.Destroy()
         else:
-            wx.MessageBox("Error identifying selected task. Please try again.", "Error", wx.OK | wx.ICON_ERROR, self)
+            wx.MessageBox("Error identifying selected task (invalid index). Please refresh the list and try again.", "Error", wx.OK | wx.ICON_ERROR)
+            self._refresh_task_list_display()
 
     def on_run_executable(self, event):
         dlg = RunExecutableDialog(self)

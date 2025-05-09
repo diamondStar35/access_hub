@@ -211,8 +211,14 @@ class AccessHub(wx.Frame):
         self.Bind(wx.EVT_MENU, self.on_quit, quit_item)
 
         help_menu = wx.Menu()
+        documentation_item = help_menu.Append(wx.ID_ANY, "&Documentation\tf1", "Open the documentation in your web browser")
+        self.Bind(wx.EVT_MENU, self.on_documentation, documentation_item)
+
         about_item = help_menu.Append(wx.ID_ABOUT, "&About", "Information about this application")
         self.Bind(wx.EVT_MENU, self.on_about, about_item)
+
+        recent_changes_item = help_menu.Append(wx.ID_ANY, "&Recent changes\tf2", "View recent changes")
+        self.Bind(wx.EVT_MENU, self.on_recent_changes, recent_changes_item)
 
         contact_item = help_menu.Append(wx.ID_ANY, "&Contact Us", "Contact the developer")
         self.Bind(wx.EVT_MENU, self.on_contact_us, contact_item)
@@ -595,10 +601,9 @@ class AccessHub(wx.Frame):
         self.manage_main_window_visibility(self.network_player)
 
     def on_task_scheduler(self, event):
-        if self.task_scheduler_instance is None: 
-            self.task_scheduler_instance = TaskScheduler(self)
-            self.task_scheduler_instance.Bind(wx.EVT_CLOSE, self.on_task_scheduler_close)
-            self.add_child_frame(self.task_scheduler_instance)
+        self.task_scheduler_instance = TaskScheduler(self)
+        self.task_scheduler_instance.Bind(wx.EVT_CLOSE, self.on_task_scheduler_close)
+        self.add_child_frame(self.task_scheduler_instance)
         self.manage_main_window_visibility(self.task_scheduler_instance)
         self.task_scheduler_instance.Show()
         self.task_scheduler_instance.Raise()
@@ -652,6 +657,38 @@ class AccessHub(wx.Frame):
     def on_quit(self, event):
         """Handles the Quit menu item."""
         self.perform_app_exit()
+
+    def on_documentation(self, event):
+        """Opens the readme.html file in the default browser."""
+        if getattr(sys, 'frozen', False):
+            base_dir = sys._MEIPASS
+        else:
+            base_dir = os.path.dirname(os.path.abspath(__file__))
+
+        doc_path = os.path.join(base_dir, "readme.html")
+        if os.path.exists(doc_path):
+            try:
+                wx.LaunchDefaultApplication(doc_path)
+            except Exception as e:
+                wx.MessageBox(f"Failed to open documentation: {e}", "Error", wx.OK | wx.ICON_ERROR)
+        else:
+            wx.MessageBox(f"Documentation file not found at:\n{doc_path}", "File Not Found", wx.OK | wx.ICON_WARNING)
+
+    def on_recent_changes(self, event):
+        """Opens the changelog.txt file with the default application."""
+        if getattr(sys, 'frozen', False):
+            base_dir = sys._MEIPASS
+        else:
+            base_dir = os.path.dirname(os.path.abspath(__file__))
+
+        changelog_path = os.path.join(base_dir, "changelog.txt")
+        if os.path.exists(changelog_path):
+             try:
+                wx.LaunchDefaultApplication(changelog_path)
+             except Exception as e:
+                 wx.MessageBox(f"Failed to open changelog: {e}", "Error", wx.OK | wx.ICON_ERROR)
+        else:
+            wx.MessageBox(f"Changelog file not found at:\n{changelog_path}", "File Not Found", wx.OK | wx.ICON_WARNING)
 
     def on_about(self, event):
         about_dialog = AboutDialog(self, title=f"About {app_vars.app_name}")
