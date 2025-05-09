@@ -5,8 +5,14 @@ from speech import speak
 import subprocess
 import os
 import webbrowser
+import ctypes
 
 class AdvancedSearchDialog(wx.Dialog):
+    """
+    A dialog for configuring and starting an advanced file search.
+    Allows searching by filename/pattern (optionally regex) within
+    specified drives or the entire device.
+    """
     def __init__(self, parent):
         super(AdvancedSearchDialog, self).__init__(parent, title="Advanced File Search", size=(500, 280))
         self.panel = wx.Panel(self)
@@ -27,13 +33,7 @@ class AdvancedSearchDialog(wx.Dialog):
 
         params_fgs.Add(wx.StaticText(self.panel, label="Look In:"), 0, wx.ALIGN_CENTER_VERTICAL | wx.ALIGN_RIGHT)        
         partitions = ["Entire Device"]
-        try:
-            proc = subprocess.Popen(['wmic', 'logicaldisk', 'get', 'name'], stdout=subprocess.PIPE, text=True, startupinfo=subprocess.STARTUPINFO(dwFlags=subprocess.STARTF_USESHOWWINDOW, wShowWindow=subprocess.SW_HIDE))
-            stdout, _ = proc.communicate(timeout=5)
-            drive_letters = [line.strip() + "\\" for line in stdout.splitlines() if ":" in line and "Name" not in line]
-            partitions.extend(drive_letters)
-        except Exception as e:
-            print(f"Could not list drives using wmic: {e}")
+        partitions.extend(self.get_drives())
         
         self.look_in_combo = wx.ComboBox(self.panel, choices=partitions, style=wx.CB_READONLY)
         self.look_in_combo.SetValue("Entire Device")
@@ -43,7 +43,7 @@ class AdvancedSearchDialog(wx.Dialog):
         btn_sizer = wx.StdDialogButtonSizer()
         self.start_search_btn = wx.Button(self.panel, wx.ID_OK, label="Start Searching")
         self.start_search_btn.SetDefault()
-        cancel_btn = wx.Button(self.panel, wx.ID_CANCEL) # Standard Cancel button
+        cancel_btn = wx.Button(self.panel, wx.ID_CANCEL)
         btn_sizer.AddButton(self.start_search_btn)
         btn_sizer.AddButton(cancel_btn)
         btn_sizer.Realize()
@@ -58,8 +58,21 @@ class AdvancedSearchDialog(wx.Dialog):
         self.Bind(EVT_SEARCH_DONE, self.on_search_done)
         self.Bind(wx.EVT_CLOSE, self.on_dialog_close)
 
+    def get_drives(self):
+        """Uses ctypes to get a list of available logical drives on Windows."""
+        drives = []
+        try:
+            bitmask = ctypes.cdll.kernel32.GetLogicalDrives()
+            for i in range(26):
+                if bitmask & (1 << i):
+                    drive_letter = f"{chr(65 + i)}:\\"
+                    drives.append(drive_letter)
+        except Exception as e:
+            return []
+        return drives
 
     def on_start_search(self, event):
+        """Handles the Start Searching button click."""
         search_term = self.search_term_text.GetValue()
         if not search_term:
             wx.MessageBox("Please enter a search term.", "Input Error", wx.OK | wx.ICON_ERROR)
@@ -68,22 +81,15 @@ class AdvancedSearchDialog(wx.Dialog):
         selected_loc = self.look_in_combo.GetValue()
         search_roots = []
         if selected_loc == "Entire Device":
-            try:
-                proc = subprocess.Popen(['wmic', 'logicaldisk', 'get', 'name'], stdout=subprocess.PIPE, text=True, startupinfo=subprocess.STARTUPINFO(dwFlags=subprocess.STARTF_USESHOWWINDOW, wShowWindow=subprocess.SW_HIDE))
-                stdout, _ = proc.communicate(timeout=5)
-                search_roots = [line.strip() + "\\" for line in stdout.splitlines() if ":" in line and "Name" not in line]
-            except Exception as e:
-                 wx.MessageBox(f"Could not determine drives for 'Entire Device': {e}", "Error", wx.OK | wx.ICON_ERROR, self)
-                 return
+            search_roots = self.get_drives()
         else:
             search_roots.append(selected_loc)
         
         if not search_roots:
-            wx.MessageBox("No search location specified or found.", "Input Error", wx.OK | wx.ICON_ERROR, self)
+            wx.MessageBox("No search location specified or found.", "Input Error", wx.OK | wx.ICON_ERROR)
             return
 
         use_regex = self.use_regex_cb.IsChecked()
-
         self.progress_dialog = wx.ProgressDialog(
             "Searching Files", "Initializing search...", maximum=100, parent=self,
             style=wx.PD_APP_MODAL | wx.PD_AUTO_HIDE | wx.PD_ELAPSED_TIME | wx.PD_CAN_ABORT | wx.PD_SMOOTH
@@ -100,6 +106,7 @@ class AdvancedSearchDialog(wx.Dialog):
         self.search_thread.start()
 
     def on_search_progress(self, event):
+        """Updates the progress dialog during the search."""
         if self.progress_dialog:
             msg = f"Files Searched: {event.files_searched}, Matches Found: {event.matches_found}"
             keep_going, _ = self.progress_dialog.Pulse(msg)
@@ -113,13 +120,11 @@ class AdvancedSearchDialog(wx.Dialog):
         self.progress_dialog = None
         event.Skip()
 
-
     def on_cancel_search_progress_internal(self):
         """Internal logic for cancelling search."""
         if self.search_thread and self.search_thread.is_alive():
             self.search_thread.stop()
         self.on_search_cancelled_or_failed()
-
 
     def on_search_cancelled_or_failed(self):
         """Common cleanup for cancellation or failure before results."""
@@ -128,6 +133,7 @@ class AdvancedSearchDialog(wx.Dialog):
             self.progress_dialog = None
 
     def on_search_done(self, event):
+        """Handles the completion of the search thread."""
         if self.progress_dialog:
             self.progress_dialog.Destroy()
             self.progress_dialog = None
@@ -145,7 +151,6 @@ class AdvancedSearchDialog(wx.Dialog):
             results_dialog.ShowModal()
             results_dialog.Destroy()
 
-        
     def on_dialog_close(self, event):
         """Handles closing the AdvancedSearchDialog itself."""
         if self.search_thread and self.search_thread.is_alive():
@@ -157,7 +162,19 @@ class AdvancedSearchDialog(wx.Dialog):
 
 
 class SearchResultsDialog(wx.Dialog):
+    """
+    A dialog to display the results of a file search.
+    Allows copying file paths or showing files in the file explorer.
+    """
     def __init__(self, parent, title, results_data):
+        """
+        Initializes the SearchResultsDialog.
+
+        Args:
+            parent: The parent wx.Window.
+            title (str): The dialog title.
+            results_data (list): A list of tuples (filename, filepath, size) of search results.
+        """
         super(SearchResultsDialog, self).__init__(parent, title=title, size=(700, 400))
         self.results_data = results_data
 
@@ -168,21 +185,20 @@ class SearchResultsDialog(wx.Dialog):
         font = results_label.GetFont()
         font.SetWeight(wx.FONTWEIGHT_BOLD)
         results_label.SetFont(font)
-        main_sizer.Add(results_label, 0, wx.ALL | wx.ALIGN_LEFT, 10) # Add with some padding
+        main_sizer.Add(results_label, 0, wx.ALL | wx.ALIGN_LEFT, 10)
 
         list_style = wx.LC_REPORT | wx.LC_SINGLE_SEL | wx.LC_VRULES | wx.LC_VIRTUAL
         self.results_list_ctrl = CustomVirtualList(panel, style=list_style)
         self.results_list_ctrl.InsertColumn(0, "File Name", width=200)
         self.results_list_ctrl.InsertColumn(1, "Full Path", width=350)
         self.results_list_ctrl.InsertColumn(2, "Size (Bytes)", width=100, format=wx.LIST_FORMAT_RIGHT)
-        self.results_list_ctrl.SetDataSource(self.results_data, self._get_display_text_for_item)
-        
+        self.results_list_ctrl.SetDataSource(self.results_data, self._get_display_text_for_item)        
         main_sizer.Add(self.results_list_ctrl, 1, wx.EXPAND | wx.ALL, 10)
 
         btn_sizer = wx.BoxSizer(wx.HORIZONTAL)
         copy_path_btn = wx.Button(panel, label="Copy Path")
         show_in_folder_btn = wx.Button(panel, label="Show in Folder")
-        close_btn = wx.Button(panel, wx.ID_OK, label="Close") # Use wx.ID_OK for standard behavior
+        close_btn = wx.Button(panel, wx.ID_OK, label="Close")
 
         btn_sizer.Add(copy_path_btn, 0, wx.ALL, 5)
         btn_sizer.Add(show_in_folder_btn, 0, wx.ALL, 5)
@@ -216,15 +232,17 @@ class SearchResultsDialog(wx.Dialog):
         return ""
 
     def _get_selected_path(self):
+        """Gets the full path of the selected item in the list."""
         selected_index = self.results_list_ctrl.GetFirstSelected()
         if selected_index == -1:
             wx.MessageBox("Please select a file from the list first.", "No Selection", wx.OK | wx.ICON_WARNING)
             return None
 
         item_data_index = self.results_list_ctrl.GetItemData(selected_index)
-        return self.results_data[item_data_index][1]
+        return self.results_data[selected_index][1]
 
     def on_copy_path(self, event):
+        """Copies the full path of the selected item to the clipboard."""
         path = self._get_selected_path()
         if path:
             if wx.TheClipboard.Open():
@@ -235,12 +253,11 @@ class SearchResultsDialog(wx.Dialog):
                 wx.MessageBox("Could not open clipboard.", "Error", wx.OK | wx.ICON_ERROR)
 
     def on_show_in_folder(self, event):
+        """Opens the folder containing the selected file in the file explorer."""
         filepath = self._get_selected_path()
         if filepath:
             try:
-                subprocess.run(['explorer', '/select,', filepath], check=True, startupinfo=subprocess.STARTUPINFO(dwFlags=subprocess.STARTF_USESHOWWINDOW, wShowWindow=subprocess.SW_HIDE))
-            except FileNotFoundError:
-                 wx.MessageBox("Could not find 'explorer'.", "Error", wx.OK | wx.ICON_ERROR, self)
+                subprocess.run(['explorer', '/select,', filepath], startupinfo=subprocess.STARTUPINFO(dwFlags=subprocess.STARTF_USESHOWWINDOW, wShowWindow=subprocess.SW_HIDE))
             except subprocess.CalledProcessError as e:
                  wx.MessageBox(f"Error showing file in folder: {e}", "Error", wx.OK | wx.ICON_ERROR, self)
             except Exception as e:

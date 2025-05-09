@@ -2,7 +2,7 @@ import os
 
 # global variables
 app_name="Access Hub"
-app_version="0.0.1b"
+app_version="0.0.4b"
 developer="Nolan Maher (Diamond star)"
 website="https://github.com/diamondStar35/access_hub"
 telegram="https://t.me/diamondStar35"
