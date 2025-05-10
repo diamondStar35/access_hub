@@ -1,6 +1,5 @@
 import wx
 import wx.lib.mixins.listctrl as listmix
-from youtube_comment_downloader.downloader import YoutubeCommentDownloader, SORT_BY_POPULAR
 import html
 
 class CommentsDialog(wx.Dialog, listmix.ColumnSorterMixin):
