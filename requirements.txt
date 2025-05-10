@@ -10,13 +10,11 @@ requests
 pydub
 keyboard
 speechRecognition
-pyautogui
 paramiko
 keyring
 cryptography
 speedtest-cli
 pyaudio
-youtube_comment_downloader
 srt
 msspeech
 gtts

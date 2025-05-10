@@ -1,12 +1,12 @@
 import wx
 from wx.lib.newevent import NewEvent
-from youtube_comment_downloader.downloader import YoutubeCommentDownloader, SORT_BY_POPULAR
 import app_vars
 from gui.custom_controls import CustomButton
 from gui.dialogs import DescriptionDialog
 from .comments import CommentsDialog
 from .download_dialogs import DownloadSettingsDialog, DownloadDialog
 from .subtitle_manager import SubtitleManager
+from .utils import run_yt_dlp_json
 from speech import speak
 import vlc
 import sys
@@ -20,6 +20,38 @@ from datetime import timedelta
 
 # Create a custom event for when VLC is ready
 VlcReadyEvent, EVT_VLC_READY = NewEvent()
+
+class CommentDownloader:
+    def __init__(self, parent_window, youtube_url):
+        self.parent_window = parent_window
+        self.youtube_url = youtube_url
+
+    def fetch_comments_async(self, callback):
+        """
+        Starts a thread to fetch comments and calls the callback when done.
+
+        Args:
+            callback (callable): A function to call on the main thread
+                                 when fetching is complete. It should accept
+                                 (comments_list, error_message) as arguments.
+        """
+        def worker_thread():
+            comments = []
+            error_message = None
+            try:
+                info_dict = run_yt_dlp_json(
+                    self.youtube_url,
+                    extra_args=['--write-comments', '--no-check-formats']
+                    )
+                if info_dict:
+                    comments = info_dict.get('comments', [])
+            except Exception as e:
+                error_message = f"An unexpected error occurred while fetching comments: {e}"
+                wx.CallAfter(wx.MessageBox, error_message, "Error", wx.OK | wx.ICON_ERROR, parent=self.parent_window)
+                comments = []
+            wx.CallAfter(callback, comments, error_message)
+
+        threading.Thread(target=worker_thread, daemon=True).start()
 
 class YoutubePlayer(wx.Frame):
     def __init__(self, parent, title, url, search_results_frame, description, original_youtube_link, results, current_index):
@@ -101,21 +133,30 @@ class YoutubePlayer(wx.Frame):
         self.fast_forward_interval = int(youtube_settings.get('fast_forward_interval', 5))
         self.rewind_interval = int(youtube_settings.get('rewind_interval', 5))
         self.default_volume = int(youtube_settings.get('default_volume', 80))
+        self.default_download_type = youtube_settings.get('default_download_type', 'Audio')
+        self.default_video_quality = youtube_settings.get('default_video_quality', 'Medium')
+        self.default_audio_format = youtube_settings.get('default_audio_format', 'mp3')
+        self.default_audio_quality = youtube_settings.get('default_audio_quality', '128K')
+        self.default_download_directory = youtube_settings.get('default_download_directory', '')
 
     def create_menu_bar(self):
         menubar = wx.MenuBar()
         video_menu = wx.Menu()
         download_menu = wx.Menu()
-        download_item = video_menu.Append(wx.ID_ANY, "Download...")
-        self.Bind(wx.EVT_MENU, self.on_download_menu_item, download_item)
-        self.save_selection_item = download_menu.Append(wx.ID_ANY, "Save Selection\tctrl+s")
-        self.Bind(wx.EVT_MENU, self.save_selection, self.save_selection_item)
-        self.save_selection_item.Enable(False)  # Initially disabled
+        download_video_item = download_menu.Append(wx.ID_ANY, "Download video...\tctrl+shift+d")
+        self.Bind(wx.EVT_MENU, self.on_download_menu_item, download_video_item)
+
+        direct_download_item = download_menu.Append(wx.ID_ANY, "Direct Download\tctrl+d")
+        self.Bind(wx.EVT_MENU, self.on_direct_download_menu_item, direct_download_item)
         video_menu.AppendSubMenu(download_menu, "&Download")
+
+        self.save_selection_item = video_menu.Append(wx.ID_ANY, "Save Selection\tctrl+s")
+        self.Bind(wx.EVT_MENU, self.save_selection, self.save_selection_item)
+        self.save_selection_item.Enable(False) 
 
         description_item = video_menu.Append(wx.ID_ANY, "Video Description\talt+d")
         self.Bind(wx.EVT_MENU, lambda event: self.show_description(event), description_item)
-        show_comments_item = video_menu.Append(wx.ID_ANY, "Show Comments")
+        show_comments_item = video_menu.Append(wx.ID_ANY, "Show Comments\talt+c")
         self.Bind(wx.EVT_MENU, self.on_show_comments, show_comments_item)
 
         copy_link_item = video_menu.Append(wx.ID_ANY, "Copy Link\tctrl+c")
@@ -146,15 +187,24 @@ class YoutubePlayer(wx.Frame):
         else:
             self.player.set_xwindow(self.panel.GetHandle())
 
-        # Attach event handler for MediaPlayerOpening
+        # Attach event handlers for MediaPlayerOpening and media end
         event_manager = self.player.event_manager()
         event_manager.event_attach(vlc.EventType.MediaPlayerOpening, self.on_media_opening)
+        event_manager.event_attach(vlc.EventType.MediaPlayerEndReached, self.on_media_end)
         self.player.audio_set_volume(self.default_volume)
         self.player.play()
         wx.PostEvent(self, VlcReadyEvent())  # Post the event after play()
 
     def on_media_opening(self, event):
         wx.PostEvent(self, VlcReadyEvent())
+
+    def on_media_end(self, event):
+        """Handles the MediaPlayerEndReached event."""
+        if self.player:
+            wx.CallAfter(self.player.stop)
+            wx.CallAfter(self.player.set_time, 0)
+            wx.CallAfter(self.pause_button.SetLabel, "Play")
+            wx.CallAfter(speak, "Video finished.")
 
     def onVlcReady(self, event):
         if self.loading_dialog:
@@ -189,10 +239,10 @@ class YoutubePlayer(wx.Frame):
             self.player.pause()
             self.pause_button.SetLabel("Play")
             speak("Paused")
-        else:
-            self.player.play()
-            self.pause_button.SetLabel("Pause")
-            speak("Play")
+        elif self.player.get_state() in (vlc.State.Paused, vlc.State.Stopped):
+             self.player.play()
+             self.pause_button.SetLabel("Pause")
+             speak("Play")
 
     def onForward(self, event):
         self.player.set_time(self.player.get_time() + (self.fast_forward_interval * 1000))
@@ -568,26 +618,36 @@ class YoutubePlayer(wx.Frame):
             wx.MessageBox("Description is not available for this video.", "Description Unavailable", wx.OK | wx.ICON_INFORMATION)
 
     def on_show_comments(self, event):
-        downloader = YoutubeCommentDownloader()
-        loading_dlg = wx.ProgressDialog("Loading Comments", "Please wait...", maximum=100, parent=self, style=wx.PD_APP_MODAL | wx.PD_AUTO_HIDE)
+        if not self.youtube_url:
+            speak("No Youtube video loaded.")
+            return
 
-        def download_comments():
-            try:
-                comments_generator = downloader.get_comments_from_url(self.youtube_url, sort_by=SORT_BY_POPULAR)
-                comments = list(comments_generator)  # Convert generator to a list (this takes time)
-                wx.CallAfter(loading_dlg.Update, 100, "Comments Loaded")
-                wx.CallAfter(show_comments_dialog, comments)
-            except Exception as e:
-                wx.CallAfter(loading_dlg.Update, 100, f"Error: {e}")
-                wx.CallAfter(wx.MessageBox, f"Error downloading comments: {e}", "Error", wx.OK | wx.ICON_ERROR)
-            finally:
-                wx.CallAfter(loading_dlg.Destroy)
+        self.loading_dialog = wx.ProgressDialog(
+            "Loading Comments",
+            "Fetching comments from YouTube...",
+            maximum=100,
+            parent=self,
+            style=wx.PD_APP_MODAL | wx.PD_AUTO_HIDE
+            )
+        self.loading_dialog.Show()
+        wx.Yield()
+        self.comment_downloader = CommentDownloader(self, self.youtube_url)
+        self.comment_downloader.fetch_comments_async(self.on_comments_fetched)
 
-        def show_comments_dialog(comments):
-            dlg = CommentsDialog(self, comments)
+    def on_comments_fetched(self, comments_list, error_message):
+        if self.loading_dialog:
+             try:
+                 self.loading_dialog.Destroy()
+             except Exception:
+                 pass
+             self.loading_dialog = None
+
+        if comments_list:
+            dlg = CommentsDialog(self, comments_list)
             dlg.ShowModal()
             dlg.Destroy()
-        threading.Thread(target=download_comments).start()
+        else:
+            wx.MessageBox("No comments found for this video.", "Comments", wx.OK | wx.ICON_INFORMATION)
 
     def on_copy_youtube_link(self, event):
         """Copies the original YouTube URL to the clipboard."""
@@ -621,6 +681,27 @@ class YoutubePlayer(wx.Frame):
              self.start_download_process(download_settings)
          settings_dialog.Destroy()
 
+    def on_direct_download_menu_item(self, event):
+        """Handles the 'Direct Download' menu item."""
+        if not self.youtube_url:
+            wx.MessageBox("No YouTube video loaded.", "Error", wx.OK | wx.ICON_INFORMATION)
+            return
+
+        if not self.default_download_directory or not os.path.isdir(self.default_download_directory):
+            wx.MessageBox("Default download directory is not set or invalid. Please configure it in Settings.", "Direct Download Failed", wx.OK | wx.ICON_WARNING)
+            return
+
+        download_settings = {
+            'url': self.youtube_url,
+            'filename': self.title,
+            'directory': self.default_download_directory,
+            'type': self.default_download_type,
+            'video_quality': self.default_video_quality,
+            'audio_format': self.default_audio_format,
+            'audio_quality': self.default_audio_quality,
+        }
+        self.start_download_process(download_settings)
+
     def start_download_process(self, download_settings):
         """Starts the DownloadDialog with the collected settings."""
         dlg_title = f"Downloading: {download_settings['filename']}"
@@ -636,6 +717,7 @@ class YoutubePlayer(wx.Frame):
             self.player = None
         if self.loading_dialog: #Close the dialog if it still exists.
             self.loading_dialog.Destroy()
+            self.loading_dialog=None
         self.Destroy()
         if self.search_results_frame:
             self.search_results_frame.Show()

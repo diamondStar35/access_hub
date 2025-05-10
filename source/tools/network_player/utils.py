@@ -24,7 +24,6 @@ def run_yt_dlp_json(url, format_selector=None, extra_args=None):
     yt_dlp_exe_path = os.path.join(project_root, 'yt-dlp.exe')
 
     if not os.path.exists(yt_dlp_exe_path):
-        print(f"Error: yt-dlp.exe not found at {yt_dlp_exe_path}")
         wx.CallAfter(wx.MessageBox, f"Error: yt-dlp.exe not found at expected location:\n{yt_dlp_exe_path}", "Dependency Error", wx.OK | wx.ICON_ERROR)
         return None
 
@@ -43,7 +42,7 @@ def run_yt_dlp_json(url, format_selector=None, extra_args=None):
 
     try:
         process = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, encoding='utf-8', startupinfo=subprocess.STARTUPINFO(dwFlags=subprocess.STARTF_USESHOWWINDOW, wShowWindow=subprocess.SW_HIDE))
-        stdout, stderr = process.communicate(timeout=60)
+        stdout, stderr = process.communicate()
 
         if process.returncode != 0:
             wx.CallAfter(wx.MessageBox, f"yt-dlp failed with error:\n{stderr}", "yt-dlp Error", wx.OK | wx.ICON_ERROR)
