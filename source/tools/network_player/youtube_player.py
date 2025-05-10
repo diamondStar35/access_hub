@@ -132,6 +132,7 @@ class YoutubePlayer(wx.Frame):
         youtube_settings = self.config.get('YouTube', {})
         self.fast_forward_interval = int(youtube_settings.get('fast_forward_interval', 5))
         self.rewind_interval = int(youtube_settings.get('rewind_interval', 5))
+        self.post_playback_action = youtube_settings.get('post_playback_action', 'Close player')
         self.default_volume = int(youtube_settings.get('default_volume', 80))
         self.default_download_type = youtube_settings.get('default_download_type', 'Audio')
         self.default_video_quality = youtube_settings.get('default_video_quality', 'Medium')
@@ -199,12 +200,25 @@ class YoutubePlayer(wx.Frame):
         wx.PostEvent(self, VlcReadyEvent())
 
     def on_media_end(self, event):
-        """Handles the MediaPlayerEndReached event."""
+        """Handles the MediaPlayerEndReached event based on settings."""
         if self.player:
-            wx.CallAfter(self.player.stop)
-            wx.CallAfter(self.player.set_time, 0)
-            wx.CallAfter(self.pause_button.SetLabel, "Play")
-            wx.CallAfter(speak, "Video finished.")
+            action = self.post_playback_action
+            if action == "Replay video":
+                wx.CallAfter(self.player.stop)
+                new_media = self.instance.media_new(self.url)
+                wx.CallAfter(self.player.set_media, new_media)
+                wx.CallAfter(self.player.play)
+                wx.CallAfter(self.pause_button.SetLabel, "Pause")
+            elif action == "Close the player":
+                wx.CallAfter(self.player.stop)
+                wx.CallAfter(self.player.set_time, 0)
+                wx.CallAfter(self.pause_button.SetLabel, "Play")
+                wx.CallAfter(self.Close)
+            else:
+                wx.CallAfter(self.player.stop)
+                wx.CallAfter(self.player.set_time, 0)
+                wx.CallAfter(self.pause_button.SetLabel, "Play")
+                wx.CallAfter(speak, "Video finished.")
 
     def onVlcReady(self, event):
         if self.loading_dialog:
@@ -279,6 +293,8 @@ class YoutubePlayer(wx.Frame):
             self.onAnnounceRemainingTime(event)
         elif keycode == ord('T') or keycode == ord('t'):
             self.onAnnounceTotalTime(event)
+        elif keycode == ord('P') or keycode == ord('p'):
+            self.onAnnouncePercentage(event)
         elif keycode == wx.WXK_HOME:
            self.onRestart(event)
         elif keycode == wx.WXK_END:
@@ -503,6 +519,18 @@ class YoutubePlayer(wx.Frame):
         total = self.player.get_length()
         formatted_time = self._format_time(total)
         speak(f"Total Time: {formatted_time}")
+
+    def onAnnouncePercentage(self, event):
+        """Announces the current playback percentage."""
+        elapsed_time_ms = self.player.get_time()
+        total_time_ms = self.player.get_length()
+
+        # Ensure both values are valid (not None or 0 total time)
+        if elapsed_time_ms is not None and total_time_ms is not None and total_time_ms > 0:
+            percentage = (elapsed_time_ms / total_time_ms) * 100
+            speak(f"{int(percentage)} percent")
+        else:
+            speak("Percentage unknown")
 
     def onRestart(self, event):
         self.player.set_time(0)

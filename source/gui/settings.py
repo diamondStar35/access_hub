@@ -3,6 +3,24 @@ from configobj import ConfigObj
 import os
 import app_vars
 
+def get_settings_path():
+    """Gets the path to the main application config file."""
+    config_dir = os.path.join(wx.StandardPaths.Get().GetUserConfigDir(), app_vars.app_name)
+    if not os.path.exists(config_dir):
+        os.makedirs(config_dir)
+    return os.path.join(config_dir, "settings.ini")
+
+def load_app_config():
+    """Loads the main application config file or creates it if it doesn't exist."""
+    config_path = get_settings_path()
+    config = ConfigObj(config_path)
+    if 'General' not in config:
+        config['General'] = {}
+    if 'YouTube' not in config:
+         config['YouTube'] = {}
+    return config
+
+
 class SettingsPanel(wx.Panel):
     """Base class for all settings panels."""
     category_name = "Default"
@@ -28,15 +46,18 @@ class SettingsPanel(wx.Panel):
         """Saves settings to the config file. Override in subclasses."""
         pass
 
+    def on_setting_change(self, event=None):
+         """Generic handler to save settings when a control value changes."""
+         self.save_settings()
+
+
 class SettingsDialog(wx.Dialog):
-    def __init__(self, parent, title="Settings"):
+    def __init__(self, parent, config, config_path, title="Settings"):
         super().__init__(parent, title=title, style=wx.DEFAULT_DIALOG_STYLE | wx.RESIZE_BORDER)
         self.panels = {}
         self.parent = parent
-
-        # Config file handling ---
-        self.config_path = self.get_config_path()
-        self.config = self.load_config()
+        self.config = config
+        self.config_path = config_path
 
         main_sizer = wx.BoxSizer(wx.VERTICAL)
         self.listbook_label = wx.StaticText(self, label="Categories:")
@@ -57,20 +78,6 @@ class SettingsDialog(wx.Dialog):
         self.SetSizer(main_sizer)
         self.listbook.Bind(wx.EVT_LISTBOOK_PAGE_CHANGED, self.on_page_changed)
         self.Bind(wx.EVT_CLOSE, self.on_close)
-
-    def get_config_path(self):
-        """Gets the path to the config file."""
-        config_dir = os.path.join(wx.StandardPaths.Get().GetUserConfigDir(), app_vars.app_name)
-        if not os.path.exists(config_dir):
-            os.makedirs(config_dir)
-        return os.path.join(config_dir, "settings.ini")
-
-    def load_config(self):
-        """Loads or creates the config file."""
-        config = ConfigObj(self.config_path)
-        if 'General' not in config:
-            config['General'] = {}  # Create the General section if it doesn't exist
-        return config
 
     def add_category(self, panel_class):
         """Adds a category and its panel to the dialog using the panel class.
@@ -101,17 +108,16 @@ class SettingsDialog(wx.Dialog):
 
     def on_ok(self, event):
         """Saves settings and closes the dialog."""
-        for panel in self.panels.values():
-            panel.save_settings()
-        self.config.write()
-        self.EndModal(wx.ID_OK)
+        try:
+            self.config.write()
+            self.EndModal(wx.ID_OK)
+        except Exception as e:
+            wx.MessageBox(f"Error saving settings: {e}", "Save Error", wx.OK | wx.ICON_ERROR)
 
     def on_page_changed(self, event):
         event.Skip()
 
     def on_close(self, event):
-        for panel in self.panels.values():
-            panel.Destroy()
         self.Destroy()
 
 

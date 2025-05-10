@@ -5,7 +5,7 @@ import os, sys, subprocess, re, platform
 import shutil
 import webbrowser
 import app_vars
-from gui.settings import SettingsDialog, GeneralSettingsPanel
+from gui.settings import SettingsDialog, GeneralSettingsPanel, load_app_config, get_settings_path
 from tools.text_utils.text_utils import TextUtilitiesApp
 from tools.text_utils.json_viewer import JsonViewer
 from tools.text_utils.xml_viewer import XMLViewer
@@ -94,10 +94,7 @@ class AccessHub(wx.Frame):
         self.recognizer = sr.Recognizer()
         self.recording_thread = None
         self.executor = concurrent.futures.ThreadPoolExecutor(max_workers=1)
-        self.settings_dialog = SettingsDialog(self)  # Instantiate settings dialog for config access
-        self.settings_dialog.add_category(GeneralSettingsPanel)
-        config_path = self.settings_dialog.get_config_path()
-        self.config = self.settings_dialog.load_config()
+        self.config = load_app_config()
 
         # taskbar icon
         self.tbIcon = AccessTaskBarIcon(self)
@@ -645,14 +642,15 @@ class AccessHub(wx.Frame):
         file_tools_frame.Show()
 
     def on_settings(self, event):
-        settings_dialog = SettingsDialog(self)
+        config_path = get_settings_path()
+        settings_dialog = SettingsDialog(self, self.config, config_path)
         settings_dialog.add_category(GeneralSettingsPanel)
         settings_dialog.add_category(ElevenLabsSettings)
         settings_dialog.add_category(YoutubeSettings)
         settings_dialog.ShowModal()
         settings_dialog.Destroy()
         # Reload Config After Settings Dialog Closes ---
-        self.config = self.settings_dialog.load_config()
+        self.config = load_app_config()
 
     def on_quit(self, event):
         """Handles the Quit menu item."""

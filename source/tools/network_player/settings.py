@@ -33,6 +33,17 @@ class YoutubeSettings(SettingsPanel):
         playback_sizer.Add(self.quality_combo, 0, wx.ALL | wx.EXPAND, 5)
         self.quality_combo.Bind(wx.EVT_COMBOBOX, self.on_setting_change)
 
+        post_playback_label = wx.StaticText(self, label="What do you want the player to do After Video Finishes:")
+        self.post_playback_combo = wx.ComboBox(
+            self,
+            choices=["Close the player", "Replay video", "Do nothing"],
+            style=wx.CB_READONLY
+        )
+        self.post_playback_combo.SetValue("Close player")
+        playback_sizer.Add(post_playback_label, 0, wx.ALL | wx.EXPAND, 5)
+        playback_sizer.Add(self.post_playback_combo, 0, wx.ALL | wx.EXPAND, 5)
+        self.post_playback_combo.Bind(wx.EVT_COMBOBOX, self.on_setting_change)
+
         update_channel_label = wx.StaticText(self, label="yt-dlp Update Channel:")
         self.update_channel_combo = wx.ComboBox(self, choices=["stable", "nightly", "master"], style=wx.CB_READONLY)
         self.update_channel_combo.SetValue("stable")
@@ -92,6 +103,11 @@ class YoutubeSettings(SettingsPanel):
         self.rewind_spin.SetValue(int(youtube_settings.get('rewind_interval', 5)))
         self.volume_spin.SetValue(int(youtube_settings.get('default_volume', 80)))
         self.quality_combo.SetValue(youtube_settings.get('video_quality', "Medium"))
+        post_playback_action = youtube_settings.get('post_playback_action', 'Close player')
+        if post_playback_action in self.post_playback_combo.GetItems():
+            self.post_playback_combo.SetValue(post_playback_action)
+        else:
+            self.post_playback_combo.SetValue("Close player")
         self.update_channel_combo.SetValue(youtube_settings.get('yt_dlp_update_channel', "stable"))
         default_type = youtube_settings.get('default_download_type', 'Video')
         if default_type in self.default_type_combo.GetItems():
@@ -116,6 +132,7 @@ class YoutubeSettings(SettingsPanel):
         self.config['YouTube']['rewind_interval'] = self.rewind_spin.GetValue()
         self.config['YouTube']['default_volume'] = self.volume_spin.GetValue()
         self.config['YouTube']['video_quality'] = self.quality_combo.GetValue()
+        self.config['YouTube']['post_playback_action'] = self.post_playback_combo.GetValue()
         self.config['YouTube']['yt_dlp_update_channel'] = self.update_channel_combo.GetValue()
         self.config['YouTube']['default_download_type'] = self.default_type_combo.GetValue()
         self.config['YouTube']['default_video_quality'] = self.default_video_quality_combo.GetValue()
