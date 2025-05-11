@@ -405,22 +405,27 @@ class YoutubePlayer(wx.Frame):
         speak(f"Current speed is {self.playback_speed:.1f}x")
 
     def onVolumeUp(self, event):
-        current_volume = self.player.audio_get_volume()
-        new_volume = min(current_volume + 5, 400)
-        if new_volume != current_volume:
-            self.player.audio_set_volume(new_volume)
-            speak(f"{int(new_volume)}%")
+        if self.player is not None:
+            current_volume = self.player.audio_get_volume()
+            new_volume = min(current_volume + 5, 400)
+            if new_volume != current_volume:
+                self.player.audio_set_volume(new_volume)
+                speak(f"{int(new_volume)}%")
 
     def onVolumeDown(self, event):
-        current_volume = self.player.audio_get_volume()
-        new_volume = max(current_volume - 5, 0)
-        if new_volume != current_volume:
-            self.player.audio_set_volume(new_volume)
-            speak(f"{int(new_volume)}%")
+        if self.player is not None:
+            current_volume = self.player.audio_get_volume()
+            new_volume = max(current_volume - 5, 0)
+            if new_volume != current_volume:
+                self.player.audio_set_volume(new_volume)
+                speak(f"{int(new_volume)}%")
 
     def onAnnounceVolume(self, event):
-        current_volume = self.player.audio_get_volume()
-        speak(f"The current Volume is {current_volume}%")
+        if self.player is not None:
+            current_volume = self.player.audio_get_volume()
+            speak(f"The current Volume is {current_volume}%")
+        else:
+            speak("Current volume is unknown")
 
     def play_next_video(self):
         if self.current_index < len(self.results) - 1:
@@ -454,11 +459,11 @@ class YoutubePlayer(wx.Frame):
             if self.is_audio:
                  format_selector = 'ba/b'
             else:
-                if self.default_quality == "Low":
+                if self.default_video_quality == "Low":
                     format_selector = 'worst[ext=mp4]/worstvideo[ext=mp4]/worst'
-                elif self.default_quality == "Medium":
+                elif self.default_video_quality == "Medium":
                     format_selector = 'best[height<=?720][ext=mp4]/bestvideo[height<=?720][ext=mp4]/best[height<=?720]'
-                elif self.default_quality == "Best":
+                elif self.default_video_quality == "Best":
                     format_selector = 'best[ext=mp4]/bestvideo[ext=mp4]/best'
                 else:
                     format_selector = 'best[height<=?720][ext=mp4]/bestvideo[height<=?720][ext=mp4]/best[height<=?720]'
@@ -501,46 +506,60 @@ class YoutubePlayer(wx.Frame):
             return f"00:{minutes:02d}:{seconds:02d}"
 
     def onAnnounceElapsedTime(self, event):
-        elapsed = self.player.get_time()
-        formatted_time = self._format_time(elapsed)
-        speak(f"Elapsed Time: {formatted_time}")
+        if self.player is not None:
+            elapsed = self.player.get_time()
+            formatted_time = self._format_time(elapsed)
+            speak(f"Elapsed Time: {formatted_time}")
+        else:
+            speak("Elapsed time is unknown")
 
     def onAnnounceRemainingTime(self, event):
-        total_time = self.player.get_length()
-        elapsed_time = self.player.get_time()
-        if total_time is not None and total_time !=0 and elapsed_time is not None and elapsed_time != 0:
-           remaining = total_time - elapsed_time
+        if self.player is not None:
+            total_time = self.player.get_length()
+            elapsed_time = self.player.get_time()
+            if total_time is not None and total_time !=0 and elapsed_time is not None and elapsed_time != 0:
+               remaining = total_time - elapsed_time
+            else:
+                remaining = None
+            formatted_time = self._format_time(remaining)
+            speak(f"Remaining Time: {formatted_time}")
         else:
-            remaining = None
-        formatted_time = self._format_time(remaining)
-        speak(f"Remaining Time: {formatted_time}")
+            speak("Remaining time is unknown")
 
     def onAnnounceTotalTime(self, event):
-        total = self.player.get_length()
-        formatted_time = self._format_time(total)
-        speak(f"Total Time: {formatted_time}")
+        if self.player is not None:
+            total = self.player.get_length()
+            formatted_time = self._format_time(total)
+            speak(f"Total Time: {formatted_time}")
+        else:
+            speak("Total time is unknown")
 
     def onAnnouncePercentage(self, event):
         """Announces the current playback percentage."""
-        elapsed_time_ms = self.player.get_time()
-        total_time_ms = self.player.get_length()
+        if self.player is not None:
+            elapsed_time_ms = self.player.get_time()
+            total_time_ms = self.player.get_length()
 
         # Ensure both values are valid (not None or 0 total time)
-        if elapsed_time_ms is not None and total_time_ms is not None and total_time_ms > 0:
-            percentage = (elapsed_time_ms / total_time_ms) * 100
-            speak(f"{int(percentage)} percent")
+            if elapsed_time_ms is not None and total_time_ms is not None and total_time_ms > 0:
+                percentage = (elapsed_time_ms / total_time_ms) * 100
+                speak(f"{int(percentage)} percent")
+            else:
+                speak("Percentage unknown")
         else:
-            speak("Percentage unknown")
+            speak("Percentage is unknown")
 
     def onRestart(self, event):
-        self.player.set_time(0)
-        speak("Restart from beginning")
+        if self.player is not None:
+            self.player.set_time(0)
+            speak("Restart from beginning")
 
     def onGoToEnd(self, event):
-        total_time = self.player.get_length()
-        if total_time != 0:
-            self.player.set_time(max(0, total_time - 10000))
-        speak("Near end")
+        if self.player is not None:
+            total_time = self.player.get_length()
+            if total_time != 0:
+                self.player.set_time(max(0, total_time - 10000))
+            speak("Near end")
 
     def handle_percentage_jump(self, keycode, modifiers):
         percentage = (keycode - ord('0')) * 10
