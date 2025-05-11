@@ -59,7 +59,7 @@ class TaskScheduler(wx.Frame):
         tasks_file = os.path.join(config_dir, app_vars.app_name, TASKS_JSON_FILE)
         app_dir = os.path.join(config_dir, app_vars.app_name)
         if not os.path.exists(app_dir):
-            os.makedirs(config_dir)
+            os.makedirs(app_dir)
         return tasks_file
 
     def _load_tasks(self):
