@@ -405,7 +405,7 @@ class AccessHub(wx.Frame):
              )
              return
 
-        self.config = self.settings_dialog.load_config()
+        self.config = load_app_config()
         channel = self.config.get('YouTube', {}).get('yt_dlp_update_channel', 'stable')
 
         update_dialog = wx.ProgressDialog(
@@ -549,7 +549,7 @@ class AccessHub(wx.Frame):
         title = "Info"
         if icon == wx.ICON_WARNING: title = "yt-dlp Update Status Uncertain"
         if icon == wx.ICON_ERROR: title = "yt-dlp Update Failed"
-        wx.MessageBox(message, title, wx.OK | icon, parent=self)
+        wx.MessageBox(message, title, wx.OK | icon, self)
 
     def open_file_in_viewer(self, filepath):
         if not filepath or not os.path.exists(filepath):
@@ -745,6 +745,15 @@ class AccessHub(wx.Frame):
 
     def perform_app_exit(self):
         """Helper function to cleanly exit the application."""
+        # Unregistering all keys before closing, and spicificly alt modifier to prevent weird issues with screen readers
+        try:
+            keyboard.release('left alt')
+            keyboard.release('right alt')
+            keyboard.unhook_all()
+            keyboard.unhook_all_hotkeys()
+        except Exception as e:
+            print(f"Error unhooking keyboard: {e}")
+
         if self.task_scheduler_instance:
             try:
                 self.task_scheduler_instance.Close(force=True)
@@ -754,8 +763,9 @@ class AccessHub(wx.Frame):
                 pass
 
         self.close_all_children()
-        self.tbIcon.RemoveIcon()
-        self.tbIcon.Destroy()
+        if self.tbIcon:
+            self.tbIcon.RemoveIcon()
+            self.tbIcon.Destroy()
         wx.Exit()
 
     def OnClose(self, event):
@@ -767,17 +777,7 @@ class AccessHub(wx.Frame):
             self.Hide()
             event.Veto()
         else:
-            if self.task_scheduler_instance:
-                try:
-                    self.task_scheduler_instance.Close(force=True)
-                except Exception:
-                    pass
-            self.close_all_children()
-            if self.tbIcon:
-                self.tbIcon.RemoveIcon()
-                self.tbIcon.Destroy()
-            self.Destroy()
-            wx.CallAfter(wx.GetApp().ExitMainLoop)
+            self.perform_app_exit()
 
 
 class AccessTaskBarIcon(wx.adv.TaskBarIcon):
