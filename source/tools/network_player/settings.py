@@ -1,5 +1,6 @@
 import wx
 from gui.settings import SettingsPanel
+from speech import speak
 import os
 import app_vars
 
@@ -93,6 +94,10 @@ class YoutubeSettings(SettingsPanel):
         default_download_sizer.Add(default_browse_button, 0, wx.ALL | wx.ALIGN_LEFT, 5)
         default_browse_button.Bind(wx.EVT_BUTTON, self.on_browse_default_directory)
 
+        reset_default_dir_button = wx.Button(self, label="Reset to Default Directory")
+        default_download_sizer.Add(reset_default_dir_button, 0, wx.ALL | wx.ALIGN_LEFT, 5)
+        reset_default_dir_button.Bind(wx.EVT_BUTTON, self.on_reset_default_directory)
+
         self.sizer.Add(default_download_sizer, 0, wx.EXPAND | wx.ALL, 5)
         self.sizer.AddStretchSpacer(1)
 
@@ -114,7 +119,6 @@ class YoutubeSettings(SettingsPanel):
              self.default_type_combo.SetValue(default_type)
         else:
              self.default_type_combo.SetSelection(0)
-
         self.default_video_quality_combo.SetValue(youtube_settings.get('default_video_quality', "Medium"))
         self.default_audio_format_combo.SetValue(youtube_settings.get('default_audio_format', "mp3"))
         self.default_audio_quality_combo.SetValue(youtube_settings.get('default_audio_quality', "128K"))
@@ -159,8 +163,25 @@ class YoutubeSettings(SettingsPanel):
 
         self.default_quality_sizer.Layout()
         self.Layout()
+        current_dir_text = self.default_directory_text.GetValue()
 
-        self.set_default_directory_control()
+        try:
+            downloads_base_dir = wx.StandardPaths.Get().GetDownloadsDir()
+            if not downloads_base_dir:
+                 downloads_base_dir = os.path.join(os.path.expanduser('~'), 'Downloads')
+        except Exception as e:
+            downloads_base_dir = os.path.join(os.path.expanduser('~'), 'Downloads')
+        downloads_app_dir = os.path.join(downloads_base_dir, app_vars.app_name)
+        default_video_path = os.path.join(downloads_app_dir, "videos")
+        default_audio_path = os.path.join(downloads_app_dir, "audios")
+
+        # Check if the current path is one of the standard defaults
+        is_standard_default = (current_dir_text == default_video_path or
+                               current_dir_text == default_audio_path)
+
+        # If it IS a standard default path, then update it based on the newly selected type
+        if is_standard_default:
+            self.set_default_directory_control()
         self.on_setting_change(None)
 
     def on_browse_default_directory(self, event):
@@ -173,6 +194,12 @@ class YoutubeSettings(SettingsPanel):
                 new_dir = dialog.GetPath()
                 self.default_directory_text.SetValue(new_dir)
                 self.on_setting_change(None)
+
+    def on_reset_default_directory(self, event):
+        """Resets the default download directory to the calculated default for the current type."""
+        self.set_default_directory_control()
+        self.on_setting_change(None)
+        speak("Default download directory reset.")
 
     def set_default_directory_control(self):
         """Sets the default download directory text control value based on the selected type."""

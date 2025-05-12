@@ -108,6 +108,8 @@ class SettingsDialog(wx.Dialog):
 
     def on_ok(self, event):
         """Saves settings and closes the dialog."""
+        for panel in self.panels.values():
+            panel.save_settings()
         try:
             self.config.write()
             self.EndModal(wx.ID_OK)

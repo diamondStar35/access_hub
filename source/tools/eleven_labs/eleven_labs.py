@@ -415,4 +415,5 @@ class ElevenLabsSettings(SettingsPanel):
         self.api_key_text.SetValue(api_key)
 
     def save_settings(self):
-        self.config.setdefault('ElevenLabs', {})['api_key'] = self.api_key_text.GetValue()
+        self.config['ElevenLabs'] = {}
+        self.config['ElevenLabs']['api_key'] = self.api_key_text.GetValue()

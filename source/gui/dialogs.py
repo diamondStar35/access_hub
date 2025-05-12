@@ -1,4 +1,113 @@
 import wx
+import webbrowser
+import app_vars
+
+
+class AccessTaskBarIcon(wx.adv.TaskBarIcon):
+    def __init__(self, frame):
+        super(AccessTaskBarIcon, self).__init__()
+        self.frame = frame
+        icon = wx.Icon(app_vars.icon)
+        self.SetIcon(icon, "Access Hub") # Tooltip
+        self.Bind(wx.adv.EVT_TASKBAR_LEFT_DOWN, self.on_left_down) # Restore on left click
+
+
+    def CreatePopupMenu(self):
+        menu = wx.Menu()
+        restore_item = menu.Append(wx.ID_ANY, "Restore")
+        menu.Bind(wx.EVT_MENU, self.on_restore, restore_item)
+        exit_item = menu.Append(wx.ID_EXIT, "Exit")
+        menu.Bind(wx.EVT_MENU, self.on_exit, exit_item)
+        return menu
+
+    def on_left_down(self, event):
+        self.on_restore(event)
+
+    def on_restore(self, event):
+        self.frame.Show()
+        self.frame.Raise()
+
+    def on_exit(self, event):
+        self.frame.close_all_children()
+        wx.Exit()
+
+
+class ContactDialog(wx.Dialog):
+    def __init__(self, parent, title):
+        super().__init__(parent, title=title, size=(350, 250))
+
+        panel = wx.Panel(self)
+        vbox = wx.BoxSizer(wx.VERTICAL)
+
+        developer_label = wx.StaticText(panel, label=f"Developer: {app_vars.developer}")
+        vbox.Add(developer_label, 0, wx.ALL | wx.CENTER, 10)
+
+        buttons_info = [
+            ("App Home Page", app_vars.website),
+            ("Telegram", app_vars.telegram),
+            ("WhatsApp", app_vars.whatsapp),
+            ("Email", f"mailto:{app_vars.mail}")
+        ]
+
+        for label, url in buttons_info:
+            button = wx.Button(panel, label=label)
+            button.Bind(wx.EVT_BUTTON, lambda event, link=url: self.on_open_url(event, link))
+            vbox.Add(button, 0, wx.ALL | wx.CENTER, 5)
+
+        panel.SetSizer(vbox)
+        self.Centre()
+
+    def on_open_url(self, event, url):
+        webbrowser.open(url)
+
+
+class AboutDialog(wx.Dialog):
+    def __init__(self, parent, title):
+        super().__init__(parent, title=title, size=(600, 800))
+        self.SetBackgroundColour(wx.Colour("#f5f5f5"))
+
+        panel = wx.Panel(self)
+        main_sizer = wx.BoxSizer(wx.VERTICAL)
+
+        name_label = wx.StaticText(panel, label=app_vars.app_name)
+        name_label.SetFont(wx.Font(16, wx.FONTFAMILY_DEFAULT, wx.FONTSTYLE_NORMAL, wx.FONTWEIGHT_BOLD))
+        version_label = wx.StaticText(panel, label=f"Version {app_vars.app_version}")
+        main_sizer.Add(name_label, 0, wx.ALL | wx.CENTER, 10)
+        main_sizer.Add(version_label, 0, wx.ALL | wx.CENTER, 5)
+        main_sizer.AddSpacer(30)
+
+        app_info = (
+            f"{app_vars.app_name} is a collection of accessible tools designed to enhance your computing experience.\n"
+            "It provides a user-friendly interface to access various utilities like text manipulation, task scheduling, "
+            "system control, and more.\n\n"
+            f"Version: {app_vars.app_version}\n"
+            "Copyright: (C) 2025 Diamond Star\n"
+            f"Developer: {app_vars.developer}\n"
+            f"Website: {app_vars.website}"
+            "License: GPL V3"
+        )
+        info_text = wx.TextCtrl(panel, style=wx.TE_READONLY | wx.TE_MULTILINE | wx.HSCROLL)
+        info_text.SetValue(app_info)
+        main_sizer.Add(info_text, 1, wx.EXPAND | wx.ALL, 10)
+
+        hyperlink = wx.adv.HyperlinkCtrl(panel, -1, "Visit Website", app_vars.website)
+        main_sizer.Add(hyperlink, 0, wx.ALL | wx.CENTER, 5)
+
+        contact_button = wx.Button(panel, label="Contact Us")
+        contact_button.Bind(wx.EVT_BUTTON, self.on_contact_us)
+        main_sizer.Add(contact_button, 0, wx.ALL | wx.CENTER, 5)
+
+        ok_button = wx.Button(panel, id=wx.ID_OK, label="OK")
+        main_sizer.Add(ok_button, 0, wx.ALL | wx.CENTER, 5)
+
+        panel.SetSizer(main_sizer)
+        self.Centre()
+
+    def on_contact_us(self, event):
+        self.EndModal(wx.ID_CANCEL)
+        contact_dialog = ContactDialog(self.GetParent(), "Contact Us")
+        contact_dialog.ShowModal()
+
 
 class DescriptionDialog(wx.Dialog):
     """

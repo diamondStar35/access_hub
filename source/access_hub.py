@@ -3,9 +3,9 @@ import wx.adv
 import wx.lib.newevent
 import os, sys, subprocess, re, platform
 import shutil
-import webbrowser
 import app_vars
 from gui.settings import SettingsDialog, GeneralSettingsPanel, load_app_config, get_settings_path
+from gui.dialogs import AccessTaskBarIcon, ContactDialog, AboutDialog
 from tools.text_utils.text_utils import TextUtilitiesApp
 from tools.text_utils.json_viewer import JsonViewer
 from tools.text_utils.xml_viewer import XMLViewer
@@ -193,7 +193,7 @@ class AccessHub(wx.Frame):
         menu_bar = wx.MenuBar()
 
         app_menu = wx.Menu()
-        settings_item = app_menu.Append(wx.ID_ANY, "&Settings", "Open the settings dialog")
+        settings_item = app_menu.Append(wx.ID_ANY, "&Settings\talt+s", "Open the settings dialog")
         self.Bind(wx.EVT_MENU, self.on_settings, settings_item)
 
         updates_menu = wx.Menu()
@@ -203,6 +203,9 @@ class AccessHub(wx.Frame):
         check_yt_dlp_update_item = updates_menu.Append(wx.ID_ANY, "Check for &yt-dlp Update", "Check for updates to yt-dlp")
         self.Bind(wx.EVT_MENU, self.on_check_yt_dlp_update, check_yt_dlp_update_item)
         app_menu.AppendSubMenu(updates_menu, "&Updates")
+
+        open_config_dir_item = app_menu.Append(wx.ID_ANY, "&Open app configuration folder", "Open the folder containing application settings")
+        self.Bind(wx.EVT_MENU, self.on_open_config_directory, open_config_dir_item)
 
         quit_item = app_menu.Append(wx.ID_EXIT, "&Quit", "Quit the application")
         self.Bind(wx.EVT_MENU, self.on_quit, quit_item)
@@ -652,6 +655,17 @@ class AccessHub(wx.Frame):
         # Reload Config After Settings Dialog Closes ---
         self.config = load_app_config()
 
+    def on_open_config_directory(self, event):
+        """Opens the application's configuration directory in the file explorer."""
+        try:
+            config_base_dir = wx.StandardPaths.Get().GetUserConfigDir()
+            app_config_dir = os.path.join(config_base_dir, app_vars.app_name)
+            if not os.path.isdir(app_config_dir):
+                os.makedirs(app_config_dir)
+            wx.LaunchDefaultApplication(app_config_dir)
+        except Exception as e:
+            wx.MessageBox(f"Could not open configuration directory.\nError: {e}", "Error Opening Directory", wx.OK | wx.ICON_ERROR, self)
+
     def on_quit(self, event):
         """Handles the Quit menu item."""
         self.perform_app_exit()
@@ -778,35 +792,6 @@ class AccessHub(wx.Frame):
             event.Veto()
         else:
             self.perform_app_exit()
-
-
-class AccessTaskBarIcon(wx.adv.TaskBarIcon):
-    def __init__(self, frame):
-        super(AccessTaskBarIcon, self).__init__()
-        self.frame = frame
-        icon = wx.Icon(app_vars.icon)
-        self.SetIcon(icon, "Access Hub") # Tooltip
-        self.Bind(wx.adv.EVT_TASKBAR_LEFT_DOWN, self.on_left_down) # Restore on left click
-
-
-    def CreatePopupMenu(self):
-        menu = wx.Menu()
-        restore_item = menu.Append(wx.ID_ANY, "Restore")
-        menu.Bind(wx.EVT_MENU, self.on_restore, restore_item)
-        exit_item = menu.Append(wx.ID_EXIT, "Exit")
-        menu.Bind(wx.EVT_MENU, self.on_exit, exit_item)
-        return menu
-
-    def on_left_down(self, event):
-        self.on_restore(event)
-
-    def on_restore(self, event):
-        self.frame.Show()
-        self.frame.Raise()
-
-    def on_exit(self, event):
-        self.frame.close_all_children()
-        wx.Exit()
 
 
 class PasswordDoctorDialog(wx.Dialog):
@@ -955,83 +940,6 @@ class NetworkPlayerFrame(wx.Frame):
         if hasattr(self, 'player') and self.player:
             self.player.Close()
         event.Skip()
-
-
-class ContactDialog(wx.Dialog):
-    def __init__(self, parent, title):
-        super().__init__(parent, title=title, size=(350, 250))
-
-        panel = wx.Panel(self)
-        vbox = wx.BoxSizer(wx.VERTICAL)
-
-        developer_label = wx.StaticText(panel, label=f"Developer: {app_vars.developer}")
-        vbox.Add(developer_label, 0, wx.ALL | wx.CENTER, 10)
-
-        buttons_info = [
-            ("App Home Page", app_vars.website),
-            ("Telegram", app_vars.telegram),
-            ("WhatsApp", app_vars.whatsapp),
-            ("Email", f"mailto:{app_vars.mail}")
-        ]
-
-        for label, url in buttons_info:
-            button = wx.Button(panel, label=label)
-            button.Bind(wx.EVT_BUTTON, lambda event, link=url: self.on_open_url(event, link))
-            vbox.Add(button, 0, wx.ALL | wx.CENTER, 5)
-
-        panel.SetSizer(vbox)
-        self.Centre()
-
-    def on_open_url(self, event, url):
-        webbrowser.open(url)
-
-
-class AboutDialog(wx.Dialog):
-    def __init__(self, parent, title):
-        super().__init__(parent, title=title, size=(600, 800))
-        self.SetBackgroundColour(wx.Colour("#f5f5f5"))
-
-        panel = wx.Panel(self)
-        main_sizer = wx.BoxSizer(wx.VERTICAL)
-
-        name_label = wx.StaticText(panel, label=app_vars.app_name)
-        name_label.SetFont(wx.Font(16, wx.FONTFAMILY_DEFAULT, wx.FONTSTYLE_NORMAL, wx.FONTWEIGHT_BOLD))
-        version_label = wx.StaticText(panel, label=f"Version {app_vars.app_version}")
-        main_sizer.Add(name_label, 0, wx.ALL | wx.CENTER, 10)
-        main_sizer.Add(version_label, 0, wx.ALL | wx.CENTER, 5)
-        main_sizer.AddSpacer(30)
-
-        app_info = (
-            f"{app_vars.app_name} is a collection of accessible tools designed to enhance your computing experience.\n"
-            "It provides a user-friendly interface to access various utilities like text manipulation, task scheduling, "
-            "system control, and more.\n\n"
-            f"Version: {app_vars.app_version}\n"
-            "Copyright: (C) 2025 Diamond Star\n"
-            f"Developer: {app_vars.developer}\n"
-            f"Website: {app_vars.website}"
-            # "License: Add your license information here"
-        )
-        info_text = wx.TextCtrl(panel, style=wx.TE_READONLY | wx.TE_MULTILINE | wx.HSCROLL)
-        info_text.SetValue(app_info)
-        main_sizer.Add(info_text, 1, wx.EXPAND | wx.ALL, 10)
-
-        hyperlink = wx.adv.HyperlinkCtrl(panel, -1, "Visit Website", app_vars.website)
-        main_sizer.Add(hyperlink, 0, wx.ALL | wx.CENTER, 5)
-
-        contact_button = wx.Button(panel, label="Contact Us")
-        contact_button.Bind(wx.EVT_BUTTON, self.on_contact_us)
-        main_sizer.Add(contact_button, 0, wx.ALL | wx.CENTER, 5)
-
-        ok_button = wx.Button(panel, id=wx.ID_OK, label="OK")
-        main_sizer.Add(ok_button, 0, wx.ALL | wx.CENTER, 5)
-
-        panel.SetSizer(main_sizer)
-        self.Centre()
-
-    def on_contact_us(self, event):
-        self.EndModal(wx.ID_CANCEL)
-        contact_dialog = ContactDialog(self.GetParent(), "Contact Us")
-        contact_dialog.ShowModal()
 
 
 if __name__ == "__main__":
