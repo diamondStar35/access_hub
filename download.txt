@@ -1,1 +1,1 @@
-https://github.com/diamondStar35/access_hub/releases/download/v0.4.2b/access_hub.exe
+https://github.com/diamondStar35/access_hub/releases/download/v0.4.3b/access_hub.exe
