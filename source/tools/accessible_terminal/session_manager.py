@@ -53,14 +53,15 @@ class SessionManager:
        data = decrypted_data[16:]
        return json.loads(data.decode()), iv
 
-    def save_session(self, name, host, port, username, password, save_password):
+    def save_session(self, name, host, port, username, password, save_password, key_file_path=None):
         conn = sqlite3.connect(self.db_path)
         cursor = conn.cursor()
         try:
+            data = {"name": name, "host": host, "port": port, "username": username}
             if save_password:
-                data = {"name": name, "host": host, "port": port, "username": username, "password": password}
-            else:
-                data = {"name": name, "host": host, "port": port, "username": username}
+                data["password"] = password
+            if key_file_path:
+                data["key_file_path"] = key_file_path
 
             encrypted_data, iv = self._encrypt_data(self.encryption_key, data)
             cursor.execute("INSERT INTO sessions (data) VALUES (?)", (base64.b64encode(encrypted_data).decode(),))
@@ -68,34 +69,49 @@ class SessionManager:
 
         except sqlite3.IntegrityError:
              wx.MessageBox(f"A session with the name '{name}' already exists.", "Error", wx.OK | wx.ICON_ERROR)
+        except Exception as e:
+            wx.MessageBox(f"Error saving session {name}: {e}", "Error", wx.OK | wx.ICON_ERROR)
         finally:
             conn.close()
 
     def load_sessions(self):
+        """Loads all saved SSH sessions."""
         conn = sqlite3.connect(self.db_path)
         cursor = conn.cursor()
         cursor.execute("SELECT data FROM sessions")
-        sessions = []
+        sessions = [] # List of (name, host, port, username, password, key_file_path)
         for row in cursor.fetchall():
-            encrypted_data = row[0]
+            raw_data_from_db = row[0]
             try:
-                data, _ = self._decrypt_data(self.encryption_key, base64.b64decode(encrypted_data))
+                # Decode the base64 string from the database
+                encrypted_data_bytes = base64.b64decode(raw_data_from_db)
+                data, _ = self._decrypt_data(self.encryption_key, encrypted_data_bytes)
                 name = data.get("name", "Unknown")
-                host = data.get("host", "Unknown")
-                port = data.get("port", "22") #Default port.
-                username = data.get("username", "Unknown")
+                host = data.get("host", "")
+                port = data.get("port", 22)
+                username = data.get("username", "root")
                 password = data.get("password", "")
-                sessions.append((name, host, int(port), username, password))
+                key_file_path = data.get("key_file_path")
+
+                # Ensure port is an integer
+                try:
+                    port = int(port)
+                except (ValueError, TypeError):
+                    port = 22
+
+                sessions.append((name, host, port, username, password, key_file_path))
             except Exception as e:
-                 wx.MessageBox(f"Error loading session data: {e}. Removing the faulty record.", "Error", wx.OK | wx.ICON_ERROR)
-                 self._remove_faulty_record(encrypted_data)
+                 wx.MessageBox(f"Error loading session data for a record: {e}. The faulty record will be removed.", "Error", wx.OK | wx.ICON_ERROR)
+                 self._remove_faulty_record(raw_data_from_db)
+
         conn.close()
         return sessions
 
-    def _remove_faulty_record(self, encrypted_data):
+    def _remove_faulty_record(self, raw_data_b64):
+        """Removes a session record based on its raw base64 data string."""
         conn = sqlite3.connect(self.db_path)
         cursor = conn.cursor()
-        cursor.execute("DELETE FROM sessions WHERE data=?", (encrypted_data,))
+        cursor.execute("DELETE FROM sessions WHERE data=?", (raw_data_b64,))
         conn.commit()
         conn.close()
 

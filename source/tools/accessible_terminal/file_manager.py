@@ -1,7 +1,7 @@
 import wx
 from speech import speak
-from tools.accessible_terminal.download_dialogs import DownloadDialog
-from tools.accessible_terminal.upload_dialogs import UploadDialog, FolderUploadDialog
+from .download_dialogs import DownloadDialog
+from .upload_dialogs import UploadDialog, FolderUploadDialog
 import paramiko
 import os
 import stat
@@ -12,7 +12,7 @@ import concurrent.futures
 
 
 class FileManager(wx.Frame):
-    def __init__(self, parent, host, port, username, password, session_name):
+    def __init__(self, parent, host, port, username, password, session_name, key_file_path=None):
         super(FileManager, self).__init__(parent, title=f"File Manager - {username}@{host}", size=(800, 600))
         self.parent_frame = parent
         self.session_name = session_name
@@ -20,6 +20,7 @@ class FileManager(wx.Frame):
         self.port = port
         self.username = username
         self.password = password
+        self.key_file_path = key_file_path
         self.ssh_client = None
         self.sftp_client = None
         self.current_path = "/"
@@ -30,7 +31,7 @@ class FileManager(wx.Frame):
         self.last_focused_item = -1
         self.clipboard = []
         self.clipboard_mode = None  # 'copy' or 'cut'
-        self.executor = concurrent.futures.ThreadPoolExecutor(max_workers=3)
+        self.executor = concurrent.futures.ThreadPoolExecutor(max_workers=5)
 
         panel = wx.Panel(self)
         vbox = wx.BoxSizer(wx.VERTICAL)
@@ -106,6 +107,7 @@ class FileManager(wx.Frame):
         self.Bind(wx.EVT_MENU, self.on_forward, id=forward_tool.GetId())
         accel_tbl = wx.AcceleratorTable([
             (wx.ACCEL_ALT, wx.WXK_RIGHT, forward_tool.GetId()),
+            (wx.ACCEL_ALT, wx.WXK_LEFT, back_tool.GetId()),
             (wx.ACCEL_CTRL, ord('C'), wx.ID_COPY),
             (wx.ACCEL_CTRL, ord('X'), wx.ID_CUT),
             (wx.ACCEL_CTRL, ord('V'), wx.ID_PASTE),
@@ -123,16 +125,47 @@ class FileManager(wx.Frame):
 
     def connect_ssh(self):
         try:
+            wx.CallAfter(self.path_label.SetLabel, f"Connecting to {self.host}...")
             self.ssh_client = paramiko.SSHClient()
             self.ssh_client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
-            self.ssh_client.connect(self.host, port=self.port, username=self.username, password=self.password)
+            if self.key_file_path:
+                 if not os.path.exists(self.key_file_path):
+                      error_msg = f"SSH Key File not found: {self.key_file_path}"
+                      wx.MessageBox(error_msg, "Connection Error", wx.OK | wx.ICON_ERROR, self)
+                      self.is_connected = False
+                      wx.CallAfter(self.Close)
+                      return
+
+                 self.ssh_client.connect(self.host, port=self.port, username=self.username, key_filename=self.key_file_path)
+            else:
+                 self.ssh_client.connect(self.host, port=self.port, username=self.username, password=self.password)
             self.sftp_client = self.ssh_client.open_sftp()
             self.is_connected = True
             wx.CallAfter(self.load_directory, self.current_path)
-        except Exception as e:
-            wx.MessageBox(f"Connection failed: {e}", "Error", wx.OK | wx.ICON_ERROR)
+
+        except FileNotFoundError as e:
+            error_msg = f"Connection failed: Key file not found: {e}"
+            wx.MessageBox(error_msg, "Connection Error", wx.OK | wx.ICON_ERROR, self)
             self.is_connected = False
-            wx.CallAfter(self.Destroy)
+            wx.CallAfter(self.Close)
+
+        except paramiko.AuthenticationException:
+            error_msg = "Connection failed: Authentication failed. Check username, password, or key file."
+            wx.MessageBox(error_msg, "Authentication Error", wx.OK | wx.ICON_ERROR, self)
+            self.is_connected = False
+            wx.CallAfter(self.Close)
+
+        except paramiko.SSHException as e:
+            error_msg = f"Connection failed: SSH error: {e}"
+            wx.MessageBox(error_msg, "SSH Error", wx.OK | wx.ICON_ERROR, self)
+            self.is_connected = False
+            wx.CallAfter(self.Close)
+
+        except Exception as e:
+            error_msg = f"Connection failed: An unexpected error occurred: {e}"
+            wx.MessageBox(error_msg, "Connection Error", wx.OK | wx.ICON_ERROR, self)
+            self.is_connected = False
+            wx.CallAfter(self.Close)
 
     def load_directory(self, path):
         if not self.is_connected:

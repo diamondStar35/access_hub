@@ -1,19 +1,21 @@
 import wx
 from speech import speak
 import paramiko
+import os
 import time
 import threading
 import re
 
 
 class AccessibleTerminal(wx.Frame):
-    def __init__(self, parent, server_host, server_port, username, password, session_name):
+    def __init__(self, parent, server_host, server_port, username, password, session_name, key_file_path=None):
         super(AccessibleTerminal, self).__init__(parent, title=f"SSH Terminal - {username}@{server_host}", size=(800, 600))
         self.session_name = session_name
         self.server_host = server_host
         self.server_port = server_port
         self.username = username
         self.password = password
+        self.key_file_path = key_file_path
         self.ssh_client = None
         self.channel = None
         self.is_connected = False
@@ -44,9 +46,22 @@ class AccessibleTerminal(wx.Frame):
 
     def connect_ssh(self):
         try:
+            self.display_output("Connecting to SSH server...\n")
             self.ssh_client = paramiko.SSHClient()
             self.ssh_client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
-            self.ssh_client.connect(self.server_host, port=self.server_port, username=self.username, password=self.password)
+
+            if self.key_file_path:
+                 # Check if key file exists before attempting connection
+                 if not os.path.exists(self.key_file_path):
+                      error_msg = f"SSH Key File not found: {self.key_file_path}"
+                      self.display_output(f"\nConnection failed: {error_msg}\n")
+                      speak(error_msg, interrupt=True)
+                      self.is_connected = False
+                      return
+
+                 self.ssh_client.connect(self.server_host, port=self.server_port, username=self.username, key_filename=self.key_file_path)
+            else:
+                 self.ssh_client.connect(self.server_host, port=self.server_port, username=self.username, password=self.password)
             self.channel = self.ssh_client.get_transport().open_session()
             self.channel.get_pty()
             self.channel.invoke_shell()
@@ -55,9 +70,32 @@ class AccessibleTerminal(wx.Frame):
             self.display_output("Connected to SSH server.\n")
             speak("Connected to SSH server.", interrupt=True)
             threading.Thread(target=self.receive_output, daemon=True).start()
+
+        except FileNotFoundError as e:
+            error_msg = f"Connection failed: Key file not found: {e}"
+            self.display_output(f"\n{error_msg}\n")
+            speak(error_msg, interrupt=True)
+            self.is_connected = False
+            wx.CallAfter(self.Destroy)
+
+        except paramiko.AuthenticationException:
+            error_msg = "Connection failed: Authentication failed. Check username, password, or key file."
+            self.display_output(f"\n{error_msg}\n")
+            speak(error_msg, interrupt=True)
+            self.is_connected = False
+            wx.CallAfter(self.Destroy)
+
+        except paramiko.SSHException as e:
+            error_msg = f"Connection failed: SSH error: {e}"
+            self.display_output(f"\n{error_msg}\n")
+            speak(error_msg, interrupt=True)
+            self.is_connected = False
+            wx.CallAfter(self.Destroy)
+
         except Exception as e:
-            self.display_output(f"Connection failed: {e}\n")
-            speak(f"Connection failed: {e}", interrupt=True)
+            error_msg = f"Connection failed: An unexpected error occurred: {e}"
+            self.display_output(f"\n{error_msg}\n")
+            speak(error_msg, interrupt=True)
             self.is_connected = False
             wx.CallAfter(self.Destroy)
 
