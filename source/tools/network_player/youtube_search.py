@@ -1,6 +1,7 @@
 import wx
 from .youtube_player import YoutubePlayer, EVT_VLC_READY
 from .download_dialogs import DownloadSettingsDialog, DownloadDialog
+from .favorites_manager import FavoritesManager
 from .utils import run_yt_dlp_json
 from gui.settings import get_file_path
 from gui.custom_controls import CustomTextCtrl
@@ -114,6 +115,7 @@ class YoutubeSearchResults(wx.Frame):
         super().__init__(parent, title="Search Results", size=(800, 650), style=wx.DEFAULT_DIALOG_STYLE| wx.RESIZE_BORDER)
         self.player=None
         self.parent=parent
+        self.favorites_manager = FavoritesManager()
         self.context_menu=None
         project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
         self.ffmpeg_path = os.path.join(project_root, 'ffmpeg.exe')
@@ -248,13 +250,11 @@ class YoutubeSearchResults(wx.Frame):
             description = info_dict.get('description', '') # Get description from JSON
 
             if not media_url:
-                # Fallback: Check 'formats' list if top-level 'url' isn't populated (less common with -f)
                 formats = info_dict.get('formats', [])
                 if formats:
                     media_url = formats[0].get('url') # Assume the first format is the chosen one
 
             if not media_url:
-                print("Could not find media URL in yt-dlp JSON output.")
                 raise ValueError("No playable URL found in yt-dlp output.")
 
             wx.CallAfter(self.create_and_show_player, title, media_url, description, url)
@@ -300,7 +300,6 @@ class YoutubeSearchResults(wx.Frame):
                 if formats:
                     media_url = formats[0].get('url')
             if not media_url:
-                print("Could not find media URL in yt-dlp JSON output.")
                 raise ValueError("No playable URL found in yt-dlp output.")
 
             wx.CallAfter(self.create_and_show_player, title, media_url, description, url)
@@ -342,9 +341,12 @@ class YoutubeSearchResults(wx.Frame):
     def onKey(self, event):
         keycode = event.GetKeyCode()
         modifiers = event.GetModifiers()
+        selection = self.results_listbox.GetSelection()
 
         if keycode == ord('C') and modifiers == wx.MOD_CONTROL:
             self.onCopyLinkFromMenu(event)
+        elif keycode == wx.WXK_SPACE and selection != -1:
+             self.onToggleFavorite(event)
         elif keycode == wx.WXK_ESCAPE:
            self.Close()
         elif keycode == wx.WXK_RETURN and event.ControlDown():
@@ -352,12 +354,26 @@ class YoutubeSearchResults(wx.Frame):
         else:
            event.Skip()
 
+    def onToggleFavorite(self, event):
+        """Adds or removes the selected video from favorites and updates the listbox text."""
+        selection = self.results_listbox.GetSelection()
+        if selection != -1:
+            selected_video = self.results[selection]
+            is_added, message = self.favorites_manager.toggle_favorite(selected_video)
+            speak(message)
+        else:
+             wx.MessageBox("Please select a video first", "No Selection", wx.OK | wx.ICON_INFORMATION)
+
     def onShow(self, event):
         if self.parent:
            self.parent.Hide()
         event.Skip()
 
     def onContextMenu(self, event):
+        selection = self.results_listbox.GetSelection()
+        if selection == -1:
+            return
+
         if self.context_menu:
             self.context_menu.Destroy()
         self.context_menu = wx.Menu()
@@ -389,6 +405,18 @@ class YoutubeSearchResults(wx.Frame):
         show_description_item = wx.MenuItem(self.context_menu, wx.ID_ANY, "Video description")
         self.context_menu.Append(show_description_item)
         self.Bind(wx.EVT_MENU, self.onShowDescription, show_description_item) # Bind to new handler
+
+        is_favorite = False
+        if selection != -1:
+             selected_video = self.results[selection]
+             video_url = selected_video.get('link')
+             if video_url:
+                 is_favorite = self.favorites_manager.is_favorite(video_url)
+
+        fav_item_label = "Remove from Favorites" if is_favorite else "Add to Favorites"
+        toggle_favorite_item = wx.MenuItem(self.context_menu, wx.ID_ANY, fav_item_label)
+        self.context_menu.Append(toggle_favorite_item)
+        self.Bind(wx.EVT_MENU, self.onToggleFavorite, toggle_favorite_item)
 
         self.PopupMenu(self.context_menu, event.GetPosition())
 

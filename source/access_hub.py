@@ -14,6 +14,7 @@ from tools.network_player.media_player import DirectLinkPlayer, EVT_VLC_READY
 from tools.network_player.youtube_search import YoutubeSearchDialog
 from tools.network_player.youtube_streamer import YoutubeStreamer
 from tools.network_player.settings import YoutubeSettings
+from tools.network_player.favorites_manager import FavoritesFrame
 from tools.task_scheduler.task_scheduler import TaskScheduler
 from tools.eleven_labs.eleven_labs import ElevenLabs, ElevenLabsSettings
 from tools.accessible_terminal.session_viewer import SessionViewer
@@ -909,6 +910,10 @@ class NetworkPlayerFrame(wx.Frame):
         direct_link_button.Bind(wx.EVT_BUTTON, self.on_direct_link)
         vbox.Add(direct_link_button, 0, wx.ALL | wx.CENTER, 10)
 
+        favorites_button = wx.Button(panel, label="Favorite videos")
+        favorites_button.Bind(wx.EVT_BUTTON, self.on_open_favorites)
+        vbox.Add(favorites_button, 0, wx.ALL | wx.CENTER, 10)
+
         panel.SetSizer(vbox)
         self.Centre()
         self.Show(True)
@@ -930,6 +935,13 @@ class NetworkPlayerFrame(wx.Frame):
         streamerdlg = YoutubeStreamer(self)
         streamerdlg.ShowModal()
         streamerdlg.Destroy()
+
+    def on_open_favorites(self, event):
+        """Opens the Favorites window."""
+        favorites_frame = FavoritesFrame(self)
+        self.Parent.add_child_frame(favorites_frame)
+        self.Parent.manage_main_window_visibility(favorites_frame)
+        favorites_frame.Show()
 
     def play_video(self, link):
         self.player = DirectLinkPlayer(self, "Direct link Player", link)
