@@ -1,4 +1,5 @@
 import wx
+from gui.custom_controls import CustomTextCtrl
 from speech import speak
 import paramiko
 import os
@@ -27,7 +28,7 @@ class AccessibleTerminal(wx.Frame):
         entry_label = wx.StaticText(panel, label="Entry:")
         vbox.Add(entry_label, 0, wx.ALL | wx.ALIGN_LEFT, 5)
 
-        self.entry_text = wx.TextCtrl(panel, style=wx.TE_PROCESS_ENTER)
+        self.entry_text = CustomTextCtrl(panel, style=wx.TE_PROCESS_ENTER, history=[])
         self.entry_text.Bind(wx.EVT_TEXT_ENTER, self.on_command_enter)
         vbox.Add(self.entry_text, 0, wx.ALL | wx.EXPAND, 5)
 
@@ -40,9 +41,51 @@ class AccessibleTerminal(wx.Frame):
         panel.SetSizer(vbox)
         self.Centre()
         self.Show(True)
+        self.output_text.Bind(wx.EVT_CHAR, self.on_output_char)
         self.Bind(wx.EVT_CLOSE, self.OnClose)
         threading.Thread(target=self.connect_ssh, daemon=True).start()
 
+
+    def on_output_char(self, event):
+        """
+        Handles character input typed in the output control.
+        Redirects character input to the entry control.
+        Allows non-character keys (like arrows, modifiers) to be handled by the output control
+        for actions like selection.
+        """
+        char_code = event.GetUnicodeKey()
+        if char_code == wx.WXK_NONE:
+            event.Skip()
+            return
+
+        # It's a character key (printable character, Tab, Enter, Backspace)
+        char = chr(char_code)
+        self.entry_text.SetFocus()
+
+        if char == '\t': # Handle Tab for navigation
+            event.Skip()
+            return
+
+        elif char == '\b': # Handle Backspace
+             current_value = self.entry_text.GetValue()
+             if current_value:
+                 # Calculate the new value after deleting the character before the insertion point
+                 pos = self.entry_text.GetInsertionPoint()
+                 if pos > 0:
+                    new_value = current_value[:pos-1] + current_value[pos:]
+                    self.entry_text.SetValue(new_value)
+                    self.entry_text.SetInsertionPoint(pos - 1)
+
+             event.Skip(False)
+             return
+
+        else:
+            # Insert the character into the entry control at its current insertion point
+            pos = self.entry_text.GetInsertionPoint()
+            self.entry_text.WriteText(char)
+            self.entry_text.SetInsertionPoint(pos + 1)
+            event.Skip(False)
+            return
 
     def connect_ssh(self):
         try:
@@ -101,6 +144,7 @@ class AccessibleTerminal(wx.Frame):
 
     def on_command_enter(self, event):
         command = self.entry_text.GetValue()
+        self.entry_text.AddHistory(command)
         self.entry_text.Clear()
         if not self.is_connected or not self.channel or not self.channel.active:
             self.display_output("Not connected to SSH server or connection closed.\n")

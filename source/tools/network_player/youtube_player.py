@@ -176,6 +176,8 @@ class YoutubePlayer(wx.Frame):
 
     def init_vlc_thread(self):
         self.instance = vlc.Instance()
+        if not self.instance:
+            wx.CallAfter(wx.MessageBox, "Failed to initialize the media player.", "Player error", wx.OK | wx.ICON_ERROR)
         self.player = self.instance.media_player_new()
         media = self.instance.media_new(self.url)
         self.player.set_media(media)

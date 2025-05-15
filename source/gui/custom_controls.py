@@ -51,6 +51,88 @@ class CustomSlider(wx.Slider):
         self.SetValue(new_value)
 
 
+class CustomTextCtrl(wx.TextCtrl):
+    """
+    A custom text control that supports history navigation using Up/Down arrows
+    and optionally saves history lines.
+    """
+    def __init__(self, parent, id=wx.ID_ANY, value="", pos=wx.DefaultPosition,
+                 size=wx.DefaultSize, style=0, validator=wx.DefaultValidator,
+                 name=wx.TextCtrlNameStr, history=None):
+        super().__init__(parent, id, value, pos, size, style, validator, name)
+        self._history = list(history) if history is not None else []
+        self._history_index = -1 # -1 means current input is not from history
+        self._current_input_before_history = "" # Store current input when browsing history
+
+        self.Bind(wx.EVT_KEY_DOWN, self.on_key_down)
+        self.Bind(wx.EVT_TEXT_ENTER, self.on_text_enter_for_history)
+
+    def on_key_down(self, event):
+        keycode = event.GetKeyCode()
+        if keycode == wx.WXK_UP:
+            if self._history:
+                # If we were typing, save current input before navigating history
+                if self._history_index == -1:
+                    self._current_input_before_history = self.GetValue()
+                self._history_index += 1
+                if self._history_index >= len(self._history):
+                    self._history_index = len(self._history) - 1
+
+                self.SetValue(self._history[self._history_index])
+                self.SetInsertionPointEnd()
+            return
+
+        elif keycode == wx.WXK_DOWN:
+            if self._history:
+                if self._history_index != -1:
+                    self._history_index -= 1
+
+                    if self._history_index >= 0:
+                         # Move down in history (towards newer items)
+                         self.SetValue(self._history[self._history_index])
+                         self.SetInsertionPointEnd()
+                    else:
+                         # Back to current input state
+                         self.SetValue(self._current_input_before_history)
+                         self.SetInsertionPointEnd()
+                         self._history_index = -1
+
+                if self._history_index != -1 or self._current_input_before_history == "":
+                     return
+                else:
+                     event.Skip()
+
+        else:
+            # Any other key press resets history navigation state
+            if self._history_index != -1:
+                 self._current_input_before_history = self.GetValue()
+                 self._history_index = -1
+            event.Skip()
+
+    def on_text_enter_for_history(self, event):
+        """Saves the current line to history if TE_MULTILINE is enabled."""
+        line = self.GetValue().strip()
+        if line and (not self._history or self._history[0] != line):
+            self._history.insert(0, line)
+        # Reset history navigation state
+        self._history_index = -1
+        self._current_input_before_history = ""
+        event.Skip()
+
+    def AddHistory(self, line):
+        """Manually adds a line to the history."""
+        line = line.strip()
+        if line and (not self._history or self._history[0] != line):
+             self._history.insert(0, line)
+        # Reset history navigation state
+        self._history_index = -1
+        self._current_input_before_history = ""
+
+    def GetHistory(self):
+        """Returns the current history list."""
+        return self._history
+
+
 class CustomVirtualList(wx.ListCtrl):
     """
     A wx.ListCtrl in virtual mode to efficiently display large datasets.

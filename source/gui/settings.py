@@ -10,6 +10,13 @@ def get_settings_path():
         os.makedirs(config_dir)
     return os.path.join(config_dir, "settings.ini")
 
+def get_file_path(filename="history.json"):
+    """A general function to get the path for a specific file within the config directory."""
+    config_dir = os.path.join(wx.StandardPaths.Get().GetUserConfigDir(), app_vars.app_name)
+    if not os.path.exists(config_dir):
+        os.makedirs(config_dir)
+    return os.path.join(config_dir, filename)
+
 def load_app_config():
     """Loads the main application config file or creates it if it doesn't exist."""
     config_path = get_settings_path()

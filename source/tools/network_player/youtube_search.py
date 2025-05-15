@@ -2,14 +2,15 @@ import wx
 from .youtube_player import YoutubePlayer, EVT_VLC_READY
 from .download_dialogs import DownloadSettingsDialog, DownloadDialog
 from .utils import run_yt_dlp_json
+from gui.settings import get_file_path
+from gui.custom_controls import CustomTextCtrl
 from youtubesearchpython import VideosSearch
 from speech import speak
 from configobj import ConfigObj
 from gui.dialogs import DescriptionDialog
 import app_vars
-import threading
 from wx.lib.newevent import NewEvent
-import os
+import os, json, threading
 
 # Events for search completion and description
 YoutubeSearchEvent, EVT_YOUTUBE_SEARCH = NewEvent()
@@ -20,6 +21,8 @@ class YoutubeSearchDialog(wx.Dialog):
         super().__init__(parent, title="YouTube Search", style=wx.DEFAULT_DIALOG_STYLE | wx.RESIZE_BORDER)
         self.parent_window = network_player_frame
         self.search=None
+        self.history_path = get_file_path("search_history.json")
+        self._history = self.load_history()
 
         self.SetSize((500, 350))
         panel = wx.Panel(self)
@@ -28,7 +31,8 @@ class YoutubeSearchDialog(wx.Dialog):
         search_label = wx.StaticText(panel, label="Search:")
         vbox.Add(search_label, 0, wx.ALL, 5)
 
-        self.search_text = wx.TextCtrl(panel)
+        self.search_text = CustomTextCtrl(panel, style=wx.TE_PROCESS_ENTER, history=self._history)
+        self.search_text.Bind(wx.EVT_TEXT_ENTER, self.onSearch)
         vbox.Add(self.search_text, 1, wx.ALL | wx.EXPAND, 5)
 
         search_button = wx.Button(panel, label="Search")
@@ -39,18 +43,46 @@ class YoutubeSearchDialog(wx.Dialog):
         panel.SetSizer(vbox)
         self.Centre()
 
+    def load_history(self):
+        """Loads search history from a JSON file."""
+        if os.path.exists(self.history_path):
+            try:
+                with open(self.history_path, 'r', encoding='utf-8') as f:
+                    history = json.load(f)
+                    if isinstance(history, list):
+                        return history
+                    else:
+                        return []
+            except (IOError, json.JSONDecodeError) as e:
+                return []
+        else:
+            return []
+
+    def save_history(self):
+        """Saves the current search history to a JSON file."""
+        history_to_save = self.search_text.GetHistory()
+        history_to_save = history_to_save[:50]
+
+        try:
+            with open(self.history_path, 'w', encoding='utf-8') as f:
+                json.dump(history_to_save, f, indent=4)
+        except (IOError, OSError) as e:
+            pass
 
     def onSearch(self, event):
-        search_term = self.search_text.GetValue()
+        search_term = self.search_text.GetValue().strip()
         if not search_term: # Don't search if textbox is empty.
             return
 
+        self.search_text.AddHistory(search_term)
+        self.save_history()
         self.loading_dialog = wx.Dialog(self, title="Searching...", style=wx.CAPTION)
         loading_text = wx.StaticText(self.loading_dialog, -1, "Searching...")
         loading_sizer = wx.BoxSizer(wx.VERTICAL)
         loading_sizer.Add(loading_text, 0, wx.ALL | wx.CENTER, 10)
         self.loading_dialog.SetSizer(loading_sizer)
         self.loading_dialog.Show()
+        wx.Yield()
 
         threading.Thread(target=self.search_youtube, args=(search_term,)).start()
         self.Bind(EVT_YOUTUBE_SEARCH, self.onSearchResults)
