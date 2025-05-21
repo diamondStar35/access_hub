@@ -70,10 +70,11 @@ Further enhancing your YouTube experience, the Network Player includes Favorites
 
 **Available Keyboard Shortcuts (Player Window):**
 
-*   **Playback Control:**
-    *   `Spacebar` or `P`: Play/Pause.
+    *   `Spacebar`: Play/Pause.
     *   `Left Arrow`: Rewind (default 5 seconds, configurable).
     *   `Right Arrow`: Forward (default 5 seconds, configurable).
+    *   `Up Arrow`: Increase volume.
+    *   `Down Arrow`: Decrease volume.
     *   `Home`: Go to the beginning of the video.
     *   `End`: Go to the end of the video.
     *   `Control + Up Arrow`: Increase playback speed.
@@ -81,26 +82,18 @@ Further enhancing your YouTube experience, the Network Player includes Favorites
     *   `S`: Announce current playback speed.
     *   `Page Up`: Previous video (if playing from search results or playlist).
     *   `Page Down`: Next video (if playing from search results or playlist).
-*   **Volume Control:**
-    *   `Up Arrow`: Increase volume.
-    *   `Down Arrow`: Decrease volume.
     *   `V`: Announce current volume.
 *   **Information & Display:**
     *   `E`: Announce elapsed time (HH:MM:SS).
     *   `R`: Announce remaining time (HH:MM:SS).
     *   `T`: Announce total time (HH:MM:SS).
-    *   `F`: Toggle full-screen mode (for video playback).
-    *   `Shift + T`: Announce video title.
-    *   `Shift + P`: Announce current playback percentage.
-*   **Seeking:**
+    *   `F`: Toggle full-screen mode. Takes effect for videos only.
+    *   `p`: Announce current playback percentage.
     *   `0-9`: Jump to 0% to 90% of the video respectively.
     *   `Shift + 0-9`: Jump to 5%, 15%, ..., 95% of the video respectively.
-*   **Segment Selection (YouTube):**
-    *   `[` or `{`: Mark selection start.
-    *   `]` or `}`: Mark selection end.
+    *   `left bracket: [` or `left brace: {`: Mark selection start.
+    *   `right bracket: ]` or `right brace: }`: Mark selection end.
     *   `Control + S`: Save selected segment as MP3.
-*   **General:**
-    *   `Alt Key`: Access the player menu (for subtitles, description, comments, etc.).
     *   `Control + C`: Copy video link to clipboard.
 
 **Configuration Note:**
@@ -125,7 +118,7 @@ Please note that it automatically detects and uses your keyboard language, There
 
 ## Online Text-to-Speech (TTS)
 
-The Online Text-to-Speech (TTS) tool enables you to convert written text into spoken audio using various online services. You can input text directly into the provided area for conversion. For speech generation, you have flexible options. In Manual Mode, you can specifically choose your desired language and voice from a list primarily powered by Microsoft Speech Services. This mode also allows for fine-tuning of the audio output by adjusting speech parameters such as Rate (controlling speed from -100 to 100), Pitch (adjusting voice pitch similarly from -100 to 100), and Volume (setting audio loudness from 1 to 100). Alternatively, you can opt for the Auto-detect Language Mode. When this is active, the tool intelligently attempts to identify the language of your input text. It will then try to use an appropriate voice from Microsoft Speech Services if one is available for the detected language. Should a Microsoft voice not be found, the tool seamlessly falls back to Google Text-to-Speech (gTTS) to perform the conversion. Regardless of the mode, the final output is an MP3 audio file of the spoken text, and you will be prompted to select a location to save this file.
+The Online Text-to-Speech tool enables you to convert written text into spoken audio using Microsoft online text to speech nateural voices. You can input text directly into the provided area for conversion. For speech generation, you have flexible options. In Manual Mode, you can specifically choose your desired language and voice from a list primarily powered by Microsoft Speech Services. This mode also allows for fine-tuning of the audio output by adjusting speech parameters such as Rate (controlling speed from -100 to 100), Pitch (adjusting voice pitch similarly from -100 to 100), and Volume (setting audio loudness from 1 to 100). Alternatively, you can opt for the Auto-detect Language Mode. When this is active, the tool intelligently attempts to identify the language of your input text. It will then try to use an appropriate voice from Microsoft Speech Services if one is available for the detected language. Should a Microsoft voice not be found, the tool seamlessly falls back to Google Text-to-Speech (gTTS) to perform the conversion. Regardless of the mode, the final output is an MP3 audio file of the spoken text, and you will be prompted to select a location to save this file.
 
 For handling multiple conversions efficiently, the Online TTS tool includes a robust Batch Processing feature. This allows you to convert several text inputs to speech in a single operation. You can add content to the batch queue either by manually typing or pasting text snippets or by selecting multiple text files from your computer, where the content of each file will be processed. When the batch process runs, you will be asked to choose an output directory where all the generated MP3 files will be saved. Files created from input text files will conveniently retain their original filenames (e.g., an input file named 'document.txt' will result in 'document.mp3'). For texts added manually, the output files will be named sequentially (like 'output_1.mp3', 'output_2.mp3', and so on). It's important to note that the batch process utilizes the language, voice (if in manual mode), and speech parameter settings that are currently active in the main Online TTS window at the time of processing.
 
@@ -137,11 +130,11 @@ An active internet connection is necessary for both checking for updates and dow
 
 ## Application Settings
 
-Access Hub allows for extensive customization through its dedicated settings dialog. These preferences control various aspects of the application's general behavior as well as the specific functionalities of its integrated tools. All configurations are conveniently saved in a `settings.ini` file, located within your user-specific application data directory, ensuring your preferences persist across sessions. To access these options, you would typically look for a "Settings" or "Preferences" item, often found within the main application menu (such as under a "File" or "Edit" menu).
+Access Hub allows for extensive customization through its dedicated settings dialog. These preferences control various aspects of the application's general behavior as well as the specific functionalities of its integrated tools. All configurations are conveniently saved in a settings file, located within your user-specific application data directory, ensuring your preferences persist across sessions. To access these options: Press the alt key in the main interface to access the main app menu, Then down arrow to settings, Usually the first option in the menu.
 
 The settings are organized into logical categories for ease of use. Under "General Settings," you can tailor core application behaviors. For instance, you can decide whether closing the main window should minimize Access Hub to the system tray or exit the application entirely. You also have the option to automatically hide the main Access Hub window when you launch one of its individual tools, and you can enable or disable the automatic check for new application versions upon startup.
 
-Beyond these general options, "Tool-Specific Settings" provide fine-grained control over individual components. For example, the Network Player's YouTube functionalities can be extensively customized: you can set default playback behaviors like fast forward/rewind intervals, preferred default volume, and your desired video playback quality. You can also define what action the player should take after a video finishes (e.g., close the player or replay the video), choose the update channel for the `yt-dlp` downloading engine, and configure comprehensive default download preferences, including the default type (Video or Audio), video quality for downloads, audio format (like MP3 or WAV) and quality for audio extractions, and a specific default directory for all your downloaded media. Similarly, for the ElevenLabs integration, this is where you would securely store your API key, which is essential for using its voice synthesis and management features. Many other tools within Access Hub may also offer configurable options in their respective settings categories, so exploring the Settings dialog is encouraged to fully tailor the application to your workflow and preferences.
+Tool-Specific Settings provide fine-grained control over individual components. For example, the Network Player's YouTube functionalities can be extensively customized: you can set default playback behaviors like fast forward/rewind intervals, preferred default volume, and your desired video playback quality. You can also define what action the player should take after a video finishes (e.g., close the player or replay the video), choose the update channel for the `yt-dlp` downloading engine, and configure comprehensive default download preferences, including the default type (Video or Audio), video quality for downloads, audio format (like MP3 or WAV) and quality for audio extractions, and a specific default directory for all your downloaded media. Similarly, for the ElevenLabs integration, this is where you would securely store your API key, which is essential for using its voice synthesis and management features. Many other tools within Access Hub may also offer configurable options in their respective settings categories, so exploring the Settings dialog is encouraged to fully tailor the application to your workflow and preferences.
 
 ## Contact me
 
