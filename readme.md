@@ -14,14 +14,7 @@ There are, of course, some undiscovered bugs I might not know about them. Please
 
 Currently: The app has a small number of tools which are as follows.
 
-- Text Utilities: The main "Text Utilities" window provides access to the following tools:
-    - **Text Splitter:** Splits text by character count, lines, or words. Options include numbering elements and ignoring blank lines.
-    - **Text Info:** Displays statistics about the input text, such as total lines, words, and characters.
-    - **Capitalize Text:** Converts the first letter of each line of text to uppercase.
-    - **Advanced Finder:** A powerful tool to search for text within multiple files or text inputs. It supports plain text and regular expression searches. Results can be reviewed, and text can be replaced individually or in bulk. Modified files/texts can be saved to a specified location.
-    - **Text Cleaner:** Processes and cleans text from multiple files. Cleaning options include removing leading/trailing spaces, normalizing line endings, stripping comments (e.g., `#`, `//`, `/* */`), removing HTML tags, deleting duplicate lines, and removing empty lines. Cleaned files are saved to a chosen destination.
-    - **JSON Viewer:** Opens, displays, and allows editing of JSON files. Data is shown in a tree view. Users can modify values, add new elements to objects/arrays, and save changes.
-    - **XML Viewer:** Provides a way to view and edit XML files. It displays the XML in a tree structure and as raw text. Features include adding/editing/removing elements and attributes, and saving modifications.
+- Text Utilities: A collection of tools for manipulating and analyzing text, detailed further below.
 - Task Scheduler: The Task Scheduler allows you to automate various actions and set reminders. Tasks are saved and will persist even if the application is restarted.
 - Shutdown control: Allows you to shutdown or restart the device at a spicific time.
 - Password doctor: Check your password integrity and password breaches.
@@ -31,140 +24,49 @@ Currently: The app has a small number of tools which are as follows.
 - Internet speed test: A simple tool to check your internet speed test.
 - Speech to text recognition: More detailed explanation below.
 
+## Text Utilities Detailed
+
+The Text Utilities suite offers a range of tools for text manipulation and analysis. The Text Splitter allows you to break down large blocks of text based on various criteria, such as by a specific number of characters, by lines, or by words. It offers options to include element numbers in the output and to ignore blank lines when splitting. For analyzing your text, the Text Info tool provides quick statistics, including the total count of lines, words, and characters. You can easily capitalize the first letter of each line using the Capitalize Text feature. For more advanced needs, the Advanced Finder helps locate and replace text across multiple files or text inputs, supporting both plain text and regular expression searches; it also allows for reviewing matches and saving modified content. The Text Cleaner tool is designed to tidy up text from various files by removing redundant elements like leading/trailing spaces, normalizing line endings, stripping out comments (supporting common styles like Python's #, C-style // and /* */), removing HTML tags, and deleting duplicate or empty lines, with the cleaned output saved to a specified destination. Furthermore, specialized viewers are available: the JSON Viewer can open, display (in a tree structure), and edit JSON files, allowing modification of values and the addition of new elements to objects or arrays, with changes savable to the original or a new file. Similarly, the XML Viewer offers capabilities to view XML in both tree and raw text formats, and supports adding, editing, or removing elements and attributes, as well as saving any modifications.
+
 ## Task Scheduler Features
 
-**Scheduled Task Types:**
+The Task Scheduler is a versatile tool designed to help you automate various actions and manage reminders effectively. It supports several types of scheduled events, ensuring your tasks are executed even if the application is restarted.
 
-*   **Alarms:**
-    *   **Configuration:** Set a specific time (hour, minute, second, AM/PM) and date (day, month) for the alarm.
-    *   **Scheduling Options:**
-        *   **Once:** Triggers only on the specified date and time.
-        *   **Daily:** Repeats every day at the set time.
-        *   **Weekly:** Repeats on the same day of the week as the initial date, at the set time.
-        *   **Custom Days:** Choose specific days of the week (e.g., Monday, Wednesday, Friday) for the alarm to repeat.
-    *   **Sound:** Select from a list of built-in alarm sounds or browse for your own custom sound file (supports MP3, WAV, OGG, FLAC). Sound previews are available.
-    *   **Snooze:** Configure how many times you can snooze (0-10 times) and the snooze interval (1-60 minutes).
-    *   **Notification:** When an alarm triggers, a notification window appears, playing the selected sound. You can "Stop Alarm" or "Snooze" (if available). If ignored, the alarm may automatically snooze or stop after a set duration. Snoozed alarms are rescheduled as temporary "Once" tasks.
-*   **Run a Script:**
-    *   Schedule a script (e.g., `.py`, `.bat`, `.exe`) or any executable file to run at a specified time (set by hours and minutes from the current time).
-*   **Open a Website:**
-    *   Schedule a specific website URL to be opened in your default web browser at a set time (relative hours/minutes).
-*   **Play a Media File:**
-    *   Schedule a media file (audio or video) to be opened with the system's default player at a chosen time (relative hours/minutes).
-*   **Send a Reminder Notification:**
-    *   Set up a system notification with a custom title and message to appear at a scheduled time (relative hours/minutes).
+One of the primary features is the ability to set comprehensive Alarms. You can configure an alarm with a precise time (hour, minute, second, AM/PM) and a specific date (day, month). Alarms offer flexible scheduling: set them to trigger "Once" for a singular event, "Daily" to repeat at the same time each day, "Weekly" to recur on the same day of the week as initially set, or on "Custom Days" where you can select specific days of the week (like Mondays, Wednesdays, and Fridays) for repetition. Sound customization is also robust; you can choose from a list of built-in alarm sounds or browse your system for a custom audio file (MP3, WAV, OGG, FLAC formats are supported), and even preview sounds before selection. For those who need a few extra minutes, the snooze functionality can be configured, allowing between 0 to 10 snoozes with an interval ranging from 1 to 60 minutes. When an alarm triggers, a notification window appears, playing the selected sound and providing "Stop Alarm" and "Snooze" (if configured) buttons. If an alarm notification is ignored, it may automatically snooze based on your settings or stop after a predetermined duration; snoozed alarms are then rescheduled as temporary "Once" tasks for their next alert.
 
-**Managing Tasks:**
-*   The main Task Scheduler window lists all your upcoming scheduled tasks, showing their name, type, scheduled time, and details.
-*   You can remove any selected task from the list.
+Beyond alarms, the Task Scheduler can automate other system actions. You can "Run a Script" by scheduling any script (such as a `.py`, `.bat` file) or executable program (`.exe`) to execute at a specified future time, which is conveniently set by defining hours and minutes from the current time. Similarly, you can schedule your computer to "Open a Website" by providing its URL, or "Play a Media File" by selecting an audio or video file from your system; both of these tasks will launch in your system's default application at the relative future time you set. Lastly, the "Send a Reminder Notification" task allows you to create a custom system notification with your own title and message that will appear at the scheduled time, also set relatively in hours and minutes.
+
+Managing your scheduled tasks is straightforward. The main Task Scheduler window provides a clear list of all your upcoming events. This list displays the name of each task, its type (e.g., Alarm, Run Script), its scheduled execution time, and other relevant details. If your plans change or a task is no longer needed, you can easily select and remove any task directly from this list.
 
 ## Eleven Labs Features
 
-**Key Features:**
+Access Hub offers a powerful suite of tools for leveraging the ElevenLabs API, enabling advanced voice generation and management. Before using these features, ensure your ElevenLabs API key is configured in the application settings.
 
-*   **Text-to-Speech (TTS):**
-    *   Convert text into speech using voices from your ElevenLabs account.
-    *   Select from available TTS models.
-    *   Fine-tune voice characteristics using settings like Stability, Similarity Boost, Style Exaggeration, and Speaker Boost.
-    *   View estimated character usage before generation.
-    *   Save generated audio as MP3 files.
+The Text-to-Speech (TTS) functionality allows you to convert written text into high-quality spoken audio. You can select from your personal ElevenLabs voices and choose an appropriate TTS model for the conversion. To further refine the output, you can adjust voice characteristics such as Stability, Similarity Boost, Style Exaggeration, and enable Speaker Boost. The tool also provides an estimate of character usage before you commit to generation, helping you manage your API quota. All generated audio can be conveniently saved as MP3 files.
 
-*   **Speech-to-Speech (STS):**
-    *   Transform the voice in an existing audio file into a different voice from your library.
-    *   Select the target voice and STS model.
-    *   Adjust voice settings for the conversion.
-    *   Options include background noise removal.
-    *   Save the converted speech as an MP3 file.
+For transforming existing audio, the Speech-to-Speech (STS) feature comes into play. This allows you to upload an audio file and convert the speech within it to sound as if spoken by a different voice from your ElevenLabs library. You'll select both the target voice and an STS model, with options to adjust voice settings and remove background noise, before saving the final converted speech as an MP3.
 
-*   **Audio Isolation:**
-    *   Upload an audio file to isolate speech by removing background noise or music.
-    *   Outputs the cleaned audio as an MP3.
-    *   Provides character usage estimates based on audio duration.
+If you need to clean up audio by separating speech from unwanted noise, the Audio Isolation tool can process an uploaded audio file to remove background music or noise, outputting the isolated speech as an MP3. This feature also provides character usage estimates based on the duration of the audio.
 
-*   **Sound Effects Generation:**
-    *   Generate sound effects from text prompts.
-    *   Control the duration of the generated sound (manual or automatic).
-    *   Adjust "Prompt Influence" to guide the generation.
-    *   Save the generated sound effect as an MP3.
+Beyond voice, you can also generate Sound Effects directly from text prompts. Describe the sound you need, and the tool will create it. You have control over the duration of the generated sound, which can be set manually or determined automatically by the API, and you can adjust the "Prompt Influence" to better guide the generation process. Generated sound effects are saved as MP3 files.
 
-*   **Voice Management (via "Voices" Menu):**
-    *   **Your Voices:**
-        *   Browse and manage voices in your personal ElevenLabs library.
-        *   Edit voice settings (Stability, Similarity, Style, Speed, Speaker Boost).
-        *   Preview voice audio samples.
-        *   Delete voices from your library.
-    *   **Voice Library (Shared Voices):**
-        *   Explore a vast library of publicly shared voices.
-        *   Search and filter voices.
-        *   Preview shared voices.
-        *   Add interesting shared voices to your personal library.
-    *   **Voice Cloning:**
-        *   Create new voice clones by uploading one or more audio samples.
-        *   Provide a name and optional description for the cloned voice.
-        *   Option to remove background noise from samples during cloning.
-    *   **Add Voice from Prompt (Voice Design):**
-        *   Design new synthetic voices by providing a text description of the desired voice characteristics.
-        *   Adjust generation parameters like Loudness, Quality, and Guidance Scale.
-        *   Generate multiple audio previews based on your prompt.
-        *   Listen to previews and add your chosen designed voice to your personal library.
+Extensive Voice Management capabilities are available through the "Voices" menu. Within "Your Voices," you can browse and manage all voices in your personal ElevenLabs account. This includes editing detailed voice settings like Stability, Similarity, Style, Speed, and Speaker Boost, previewing audio samples of each voice, and deleting voices you no longer need. The "Voice Library (Shared Voices)" option opens up a vast collection of publicly shared voices from the ElevenLabs community. You can search and filter this library, preview any shared voice, and add those you like to your personal voice collection. Furthermore, Access Hub provides two powerful methods for creating new voices. "Voice Cloning" allows you to create a digital replica of a voice by uploading one or more audio samples. You'll provide a name and an optional description for the clone, and there's an option to remove background noise from the uploaded samples during the cloning process. Alternatively, "Add Voice from Prompt" (Voice Design) lets you craft entirely new synthetic voices by describing the desired characteristics in text. You can adjust generation parameters such as Loudness, Quality, and Guidance Scale. The system will then generate multiple audio previews based on your description, allowing you to listen to them and select your preferred one to add to your personal voice library.
 
 ## File Utilities
 
-- **Advanced File Search:** Searches for files across specified drives or the entire device. Users can search by filename or pattern, with an option for regular expressions. Results are displayed in a list, allowing users to copy file paths or open the file's location.
-- **Multiple File Rename:** Renames multiple files based on user-defined criteria. Files can be added individually or by folder. Renaming options include:
-    - Using regular expressions to find and replace parts of filenames.
-    - Sequential numbering (e.g., using `#` in the search pattern like `image-#.jpg` to `image-001.jpg`).
-    - Changing file extensions.
-    Renamed files are saved to a specified output folder.
+Access Hub also includes a suite of File Utilities to help manage your files. The Advanced File Search tool enables you to locate files across your entire device or specific drives using filenames or more complex patterns, including regular expressions. Search results are conveniently displayed in a list, from which you can copy file paths or directly open a file's containing folder. For batch operations, the Multiple File Rename tool offers powerful ways to rename many files at once. You can add files individually or select entire folders. This tool allows for renaming based on regular expression search and replace within filenames, sequential numbering (for instance, transforming a set of images into a numbered sequence like `image-001.jpg`, `image-002.jpg`, etc., by using a '#' placeholder in the pattern), or simply changing file extensions. All renamed files are then saved to a designated output folder.
 
 ## Network Player
 
 The Network Player offers a rich multimedia experience, especially tailored for YouTube, but also supporting direct media links.
 
-**Core Features:**
+Interaction with YouTube content is a core strength of the Network Player. You can search YouTube directly from within the application; search results conveniently display the video title, duration, and uploader, with an option to load more results for extensive searches. When you have a specific YouTube link (for either a single video or a playlist), you can paste it directly into the player to begin streaming. Upon pasting, you have the choice to play it as a full "Video" or as "Audio-only," and you can also select your preferred initial video quality (Low, Medium, or Best). Beyond just watching, the player allows you to delve deeper into YouTube content. You can view the full text description of any playing YouTube video, browse through its comments (which are displayed in a sortable list showing the author and comment text), and manage subtitles. The subtitle feature lists all available manual and automatic subtitles for a video, allows you to download your chosen one in SRT format, and then displays these subtitles synchronized with the video playback.
 
-*   **YouTube Search:**
-    *   Search YouTube directly within the app.
-    *   Results display title, duration, and uploader.
-    *   Option to load more results.
-*   **YouTube Link Playback:**
-    *   Paste YouTube links (video or playlist) to stream directly.
-    *   Choose playback mode: "Video" or "Audio-only".
-    *   Select video quality when pasting: Low, Medium, or Best.
-*   **Direct Link Playback:**
-    *   Play media streams from generic URLs (e.g., online radio, direct video/audio links).
-*   **Playback Controls:**
-    *   Standard controls: Play/Pause, Rewind, Forward.
-    *   Adjust volume and playback speed.
-    *   Seek to specific percentages or time points.
-*   **Subtitle Support (YouTube):**
-    *   Lists available manual and automatic subtitles for a video.
-    *   Downloads the selected subtitle in SRT format.
-    *   Displays subtitles synchronized with the video playback.
-*   **Comment Viewing (YouTube):**
-    *   Browse comments for a YouTube video.
-    *   Comments are displayed in a sortable list showing author and text.
-*   **Download Features (Primarily YouTube):**
-    *   **Download Settings Dialog:**
-        *   Customize filename before download.
-        *   Choose download type: "Video" or "Audio".
-        *   For Video: Select quality (e.g., Low, Medium, Best – actual options depend on video).
-        *   For Audio: Select format (MP3, WAV, AAC, Opus, FLAC) and audio quality (e.g., 128K, 192K, Best VBR).
-        *   Specify a download directory (defaults to organized subfolders in your main Downloads folder, e.g., `Downloads/AccessHub/YouTube/Video`).
-    *   **Direct Download:**
-        *   Quickly download using pre-configured default settings.
-        *   These defaults (type, quality, format) can be set in the application's YouTube settings.
-    *   A progress dialog shows download status, including percentage, downloaded size, total size, speed, and ETA.
-*   **Favorites Management (YouTube):**
-    *   Add YouTube videos to a local favorites list for easy access.
-    *   A dedicated "Favorites" window allows browsing, playing, downloading, or removing saved favorite videos.
-*   **Save Video Segment (YouTube):**
-    *   While playing a YouTube video, mark a start point (`[`) and an end point (`]`).
-    *   Save the selected segment as an MP3 audio file (Ctrl+S).
-*   **Video Description (YouTube):**
-    *   View the full text description of the currently playing YouTube video.
-*   **Playlist Navigation (YouTube Search):**
-    *   When playing a video from the search results, use Page Up/Page Down to navigate to the previous/next video in the results list.
+For general media consumption, the Network Player supports Direct Link Playback, enabling you to stream media from various generic URLs, such as online radio stations or direct links to video and audio files. Regardless of the source, comprehensive Playback Controls are at your fingertips. These include standard functions like Play/Pause, Rewind, and Forward, as well as options to adjust the volume, change the playback speed, and seek to specific percentages or time points within the media.
+
+The player also provides robust Download Features, primarily focused on YouTube content. You can initiate downloads through the detailed Download Settings Dialog. This dialog lets you customize the filename before saving, choose the download type ("Video" or "Audio"), and select specific quality settings. For video downloads, quality options like Low, Medium, or Best are available (depending on the source video). For audio, you can pick your desired format (MP3, WAV, AAC, Opus, or FLAC) and audio quality (e.g., 128K, 192K, or Best VBR). You can also specify a custom download directory, which defaults to an organized structure within your main Downloads folder (e.g., `Downloads/AccessHub/YouTube/Video`). For quicker access, a Direct Download option uses your pre-configured default settings (these defaults for type, quality, and format can be pre-set in the application's YouTube settings). During any download, a progress dialog keeps you informed of the status, showing the percentage complete, downloaded size, total size, current speed, and estimated time remaining (ETA).
+
+Further enhancing your YouTube experience, the Network Player includes Favorites Management. You can add any YouTube video to a local favorites list for quick and easy access later. A dedicated "Favorites" window allows you to browse, play, download, or remove videos you've saved. For capturing specific parts of a video, the Save Video Segment feature lets you mark a start point (using `[`) and an end point (using `]`) while playing a YouTube video, and then save just that selected portion as an MP3 audio file (using Ctrl+S). When playing videos found via the YouTube search, Playlist Navigation is enabled, allowing you to use Page Up and Page Down keys to move to the previous or next video in the search results list, creating a seamless viewing sequence.
 
 **Available Keyboard Shortcuts (Player Window):**
 
@@ -223,78 +125,23 @@ Please note that it automatically detects and uses your keyboard language, There
 
 ## Online Text-to-Speech (TTS)
 
-The Online TTS tool allows you to convert text into speech using online services.
+The Online Text-to-Speech (TTS) tool enables you to convert written text into spoken audio using various online services. You can input text directly into the provided area for conversion. For speech generation, you have flexible options. In Manual Mode, you can specifically choose your desired language and voice from a list primarily powered by Microsoft Speech Services. This mode also allows for fine-tuning of the audio output by adjusting speech parameters such as Rate (controlling speed from -100 to 100), Pitch (adjusting voice pitch similarly from -100 to 100), and Volume (setting audio loudness from 1 to 100). Alternatively, you can opt for the Auto-detect Language Mode. When this is active, the tool intelligently attempts to identify the language of your input text. It will then try to use an appropriate voice from Microsoft Speech Services if one is available for the detected language. Should a Microsoft voice not be found, the tool seamlessly falls back to Google Text-to-Speech (gTTS) to perform the conversion. Regardless of the mode, the final output is an MP3 audio file of the spoken text, and you will be prompted to select a location to save this file.
 
-**Main Features:**
-*   **Input Text:** Enter text directly into the text area.
-*   **Speech Generation:**
-    *   **Manual Mode:**
-        *   Select the desired language and specific voice from the available options (powered by Microsoft Speech Services).
-        *   Adjust speech parameters:
-            *   **Rate:** Controls the speed of the speech (-100 to 100).
-            *   **Pitch:** Adjusts the pitch of the voice (-100 to 100).
-            *   **Volume:** Sets the volume of the generated audio (1 to 100).
-    *   **Auto-detect Language Mode:**
-        *   When enabled, the tool attempts to automatically detect the language of the input text.
-        *   It will try to use a suitable voice from Microsoft Speech Services if available for the detected language.
-        *   If a Microsoft voice isn't found for the detected language, it will use Google Text-to-Speech (gTTS) as a fallback.
-*   **Output:** Generates an MP3 audio file of the spoken text. You will be prompted to choose a location to save the file.
-
-**Batch Processing:**
-*   The tool also includes a batch processing feature to convert multiple text inputs to speech in one go.
-*   **Input Sources for Batch:**
-    *   **Add Text:** Manually add individual text snippets to the batch list.
-    *   **Select Files:** Add multiple text files; the content of each file will be processed.
-*   **Output for Batch:**
-    *   You'll be asked to select an output directory for all generated MP3 files.
-    *   Files generated from input text files will retain the original filename (e.g., `document.txt` becomes `document.mp3`).
-    *   Files generated from manually added text will be named sequentially (e.g., `output_1.mp3`, `output_2.mp3`).
-*   The batch process uses the language, voice (if in manual mode), and speech parameter settings currently active in the main Online TTS window.
+For handling multiple conversions efficiently, the Online TTS tool includes a robust Batch Processing feature. This allows you to convert several text inputs to speech in a single operation. You can add content to the batch queue either by manually typing or pasting text snippets or by selecting multiple text files from your computer, where the content of each file will be processed. When the batch process runs, you will be asked to choose an output directory where all the generated MP3 files will be saved. Files created from input text files will conveniently retain their original filenames (e.g., an input file named 'document.txt' will result in 'document.mp3'). For texts added manually, the output files will be named sequentially (like 'output_1.mp3', 'output_2.mp3', and so on). It's important to note that the batch process utilizes the language, voice (if in manual mode), and speech parameter settings that are currently active in the main Online TTS window at the time of processing.
 
 ## Application Updater
 
-Access Hub includes an automatic update checker to help you stay current with the latest features and fixes.
+To ensure you always have the latest features and improvements, Access Hub incorporates an automatic update checker. Upon startup, the application can connect to a designated server to see if a new version is available. If an update is found, you will be informed and given the option to download and install it. Should you choose to proceed, the new version will begin downloading, and a progress dialog will keep you updated on its status, showing the file name, total size, percentage complete, and providing an option to cancel the download. After the download finishes successfully, Access Hub will attempt to launch the installer for the new version. Please note that you might need to grant administrative privileges for the installer to run properly. The main application will usually close once the installer has been initiated.
 
-**How it Works:**
-*   On startup, the application can check a designated server for a new version.
-*   If a newer version is found, you will be notified and asked if you wish to download and install the update.
-*   If you choose to update, the new version will be downloaded. A progress dialog will show the download status (file name, size, percentage complete, and a cancel option).
-*   Once the download is complete, the application will attempt to launch the installer for the new version. You may need to grant administrative privileges for the installer to run.
-*   The main application will typically close after launching the installer.
-
-**Notes:**
-*   An active internet connection is required for the update check and download.
-*   The update process involves downloading an installer file, which then handles the actual update of the application files.
+An active internet connection is necessary for both checking for updates and downloading the update files. The update itself is performed by an installer program that is downloaded, which then takes care of updating the application files on your system.
 
 ## Application Settings
 
-Access Hub provides a settings dialog where you can customize various aspects of the application's behavior and the functionality of its tools. These settings are saved in a configuration file (`settings.ini`) located in your user-specific application data directory.
+Access Hub allows for extensive customization through its dedicated settings dialog. These preferences control various aspects of the application's general behavior as well as the specific functionalities of its integrated tools. All configurations are conveniently saved in a `settings.ini` file, located within your user-specific application data directory, ensuring your preferences persist across sessions. To access these options, you would typically look for a "Settings" or "Preferences" item, often found within the main application menu (such as under a "File" or "Edit" menu).
 
-You can typically access the settings through a "Settings" or "Preferences" option in the main application menu (e.g., under "File" or "Edit").
+The settings are organized into logical categories for ease of use. Under "General Settings," you can tailor core application behaviors. For instance, you can decide whether closing the main window should minimize Access Hub to the system tray or exit the application entirely. You also have the option to automatically hide the main Access Hub window when you launch one of its individual tools, and you can enable or disable the automatic check for new application versions upon startup.
 
-The settings are organized into categories. Here's an overview of what you can configure:
-
-**General Settings:**
-*   **Minimize to tray on close:** Choose whether closing the main window minimizes the application to the system tray or exits it.
-*   **Hide main window when opening tools:** Decide if the main Access Hub window should automatically hide when you launch one of its tools.
-*   **Check for updates at startup:** Enable or disable automatic checking for new versions of Access Hub when it starts.
-
-**Tool-Specific Settings:**
-Many individual tools also have their own settings that can be adjusted here. For example:
-*   **Network Player (YouTube):**
-    *   Configure default playback behaviors like fast forward/rewind intervals and default volume.
-    *   Set your preferred default video playback quality.
-    *   Define what happens after a video finishes (e.g., close player, replay).
-    *   Choose the update channel for `yt-dlp` (the underlying YouTube downloader).
-    *   Set default download preferences:
-        *   Default type (Video or Audio).
-        *   Default video quality for downloads.
-        *   Default audio format (e.g., MP3, WAV) and quality for audio downloads.
-        *   Specify a default directory for your downloads.
-*   **ElevenLabs:**
-    *   Securely store your ElevenLabs API key, which is required to use the ElevenLabs integration.
-
-Other tools may also have configurable options available in their respective settings sections. Exploring the Settings dialog is recommended to tailor Access Hub to your preferences.
+Beyond these general options, "Tool-Specific Settings" provide fine-grained control over individual components. For example, the Network Player's YouTube functionalities can be extensively customized: you can set default playback behaviors like fast forward/rewind intervals, preferred default volume, and your desired video playback quality. You can also define what action the player should take after a video finishes (e.g., close the player or replay the video), choose the update channel for the `yt-dlp` downloading engine, and configure comprehensive default download preferences, including the default type (Video or Audio), video quality for downloads, audio format (like MP3 or WAV) and quality for audio extractions, and a specific default directory for all your downloaded media. Similarly, for the ElevenLabs integration, this is where you would securely store your API key, which is essential for using its voice synthesis and management features. Many other tools within Access Hub may also offer configurable options in their respective settings categories, so exploring the Settings dialog is encouraged to fully tailor the application to your workflow and preferences.
 
 ## Contact me
 
