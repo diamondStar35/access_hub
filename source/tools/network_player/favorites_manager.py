@@ -10,8 +10,10 @@ from .utils import run_yt_dlp_json
 from gui.dialogs import DescriptionDialog
 from configobj import ConfigObj
 
-# Events for description fetching
+# Events for description fetching, playlists, and channels
 DescriptionFetchEvent, EVT_DESCRIPTION_FETCH = wx.lib.newevent.NewEvent()
+FavPlaylistItemsFetchEvent, EVT_FAV_PLAYLIST_ITEMS_FETCH = wx.lib.newevent.NewEvent()
+FavChannelDataFetchEvent, EVT_FAV_CHANNEL_DATA_FETCH = wx.lib.newevent.NewEvent()
 
 def get_favorites_path():
     """Gets the path to the favorites JSON file."""
@@ -55,28 +57,40 @@ class FavoritesManager:
             wx.MessageBox(f"Error saving favorites: {e}", "Error", wx.OK | wx.ICON_ERROR)
 
     def add_favorite(self, video_info):
-        """Adds a video to the favorites list if not already present."""
-        video_url = video_info.get('link')
+        """Adds an item to the favorites list if not already present.
+        item_info should be a dict with 'webpage_url', 'title', and 'item_type'.
+        Optionally, it can include 'description'.
+        """
+        video_url = video_info.get('webpage_url')
         if not video_url: return False
 
         if not self.is_favorite(video_url):
             info = {
                 'title': video_info.get('title', 'Untitled'),
                 'youtube_url': video_url,
+                'type': video_info.get('item_type', 'video'),
             }
+            if 'description' in video_info and video_info['description'] is not None:
+                info['description'] = video_info['description']            
             self._favorites.append(info)
             self.save_favorites()
-            return True
-        return False # Already exists
+            return True, f"{info['type']} added to favorites."
+        return False, "Item is already in favorites."
 
-    def remove_favorite(self, video_url):
-        """Removes a video from the favorites list by URL."""
+    def remove_favorite(self, item_url):
+        """Removes an item from the favorites list by URL."""
         initial_count = len(self._favorites)
-        self._favorites = [fav for fav in self._favorites if fav.get('youtube_url') != video_url]
+        item_type_removed = 'Item'
+        for fav in self._favorites:
+            if fav.get('youtube_url') == item_url:
+                item_type_removed = fav.get('type', 'item')
+                break # Found the item
+
+        self._favorites = [fav for fav in self._favorites if fav.get('youtube_url') != item_url]
         if len(self._favorites) < initial_count:
             self.save_favorites()
-            return True
-        return False # Not found
+            return True, f"{item_type_removed} removed from favorites."
+        return False, "Item not found in favorites."
 
     def is_favorite(self, video_url):
         """Checks if a video URL is already in the favorites."""
@@ -86,21 +100,20 @@ class FavoritesManager:
         """Returns the current list of favorite videos."""
         return self._favorites
 
-    def toggle_favorite(self, video_info):
-        """Adds or removes a favorite based on its current status."""
-        video_url = video_info.get('link')
-        if not video_url: return False, "No URL provided."
+    def toggle_favorite(self, item_info):
+        """Adds or removes a favorite based on its current status.
+        item_info should be a dict with 'youtube_url', 'title', and 'item_type'.
+        """
+        item_url = item_info.get('webpage_url')
+        if not item_url: 
+            return False, "Cannot toggle favorite: No URL provided."
 
-        if self.is_favorite(video_url):
-            if self.remove_favorite(video_url):
-                return False, "Removed from favorites."
-            else:
-                return False, "Failed to remove from favorites." # Should not happen if is_favorite is true
+        if self.is_favorite(item_url):
+            success, message = self.remove_favorite(item_url)
+            return not success, message
         else:
-            if self.add_favorite(video_info):
-                return True, "Added to favorites."
-            else:
-                return True, "Failed to add to favorites." # Should not happen if is_favorite is false
+            success, message = self.add_favorite(item_info)
+            return success, message
 
 
 class FavoritesFrame(wx.Frame):
@@ -155,7 +168,10 @@ class FavoritesFrame(wx.Frame):
         self.Bind(wx.EVT_CLOSE, self.onClose)
         self.Bind(wx.EVT_CHAR_HOOK, self.onKey)
         self.favorites_listbox.Bind(wx.EVT_CONTEXT_MENU, self.onContextMenu)
+        self.favorites_listbox.Bind(wx.EVT_LISTBOX_DCLICK, self.onPlay)
         self.Bind(EVT_DESCRIPTION_FETCH, self.onDescriptionFetchComplete)
+        self.Bind(EVT_FAV_PLAYLIST_ITEMS_FETCH, self.onPlaylistItemsFetched)
+        self.Bind(EVT_FAV_CHANNEL_DATA_FETCH, self.onChannelDataFetched)
         self.Centre()
 
 
@@ -163,7 +179,9 @@ class FavoritesFrame(wx.Frame):
         """Populates the listbox with current favorites."""
         self.favorites_listbox.Clear()
         for fav in self.current_favorites:
-            self.favorites_listbox.Append(fav.get('title', 'Untitled'))
+            item_type_display = fav.get('type', 'video')
+            item_text = f"{fav.get('title', 'Untitled')}: {item_type_display}"
+            self.favorites_listbox.Append(item_text)
 
     def get_selected_video_info(self):
         """Gets the video info dictionary for the currently selected item."""
@@ -173,30 +191,56 @@ class FavoritesFrame(wx.Frame):
         return None
 
     def onPlay(self, event, play_as_audio=False):
-        """Plays the selected favorite video after fetching stream info."""
-        selected_video = self.get_selected_video_info()
-        if selected_video:
-            youtube_url = selected_video.get('youtube_url')
-            title = selected_video.get('title', 'Untitled')
-            if not youtube_url:
-                 wx.MessageBox(f"Could not find URL for '{title}'.", "Playback Error", wx.OK | wx.ICON_ERROR)
-                 return
+        """Plays the selected favorite video or opens playlist/channel."""
+        selected_item = self.get_selected_video_info()
+        if not selected_item:
+            wx.MessageBox("Please select an item.", "No selection", wx.OK | wx.ICON_INFORMATION)
+            return
 
-            quality = self.default_video_quality.lower()
-            if quality == "low":
-                format_selector = 'worst[ext=mp4]/worstvideo[ext=mp4]/worst'
-            elif quality == "medium":
-                 format_selector = 'best[height<=?720][ext=mp4]/bestvideo[height<=?720][ext=mp4]/best[height<=?720]'
-            elif quality == "best":
-                 format_selector = 'best[ext=mp4]/bestvideo[ext=mp4]/best'
+        item_url = selected_item.get('youtube_url')
+        title = selected_item.get('title', 'Untitled')
+        item_type = selected_item.get('type', 'video')
+        if not item_url:
+            wx.MessageBox(f"Could not find the link for '{title}'.", "Error", wx.OK | wx.ICON_ERROR)
+            return
+
+        if item_type == 'video':
+            if play_as_audio:
+                format_selector = 'ba/b'
             else:
-                format_selector = 'best[height<=?720][ext=mp4]/bestvideo[height<=?720][ext=mp4]/best[height<=?720]'
-            threading.Thread(target=self._fetch_and_play, args=(youtube_url, title, format_selector)).start()
+                quality = self.default_video_quality.lower()
+                if quality == "low":
+                    format_selector = 'worst[ext=mp4]/worstvideo[ext=mp4]/worst'
+                elif quality == "medium":
+                    format_selector = 'best[height<=?720][ext=mp4]/bestvideo[height<=?720][ext=mp4]/best[height<=?720]'
+                elif quality == "best":
+                    format_selector = 'best[ext=mp4]/bestvideo[ext=mp4]/best'
+                else:
+                    format_selector = 'best[height<=?720][ext=mp4]/bestvideo[height<=?720][ext=mp4]/best[height<=?720]'
+            threading.Thread(target=self._fetch_and_play_video, args=(item_url, title, format_selector, play_as_audio)).start()
 
-    def _fetch_and_play(self, youtube_url, title, format_selector):
+        elif item_type == 'playlist':
+            if play_as_audio:
+                wx.MessageBox("Cannot play a playlist as audio directly from favorites. Please open it first.", "Info", wx.OK | wx.ICON_INFORMATION)
+                return
+            self.show_loading_dialog(f"Getting playlist info for: {title}", "Loading Playlist...")
+            threading.Thread(target=self.fetch_playlist_items_thread, args=(item_url, title)).start()
+
+        elif item_type == 'channel':
+            if play_as_audio:
+                wx.MessageBox("Cannot open a channel as audio directly from favorites. Please open it first.", "Info", wx.OK | wx.ICON_INFORMATION)
+                return
+            self.show_loading_dialog(f"Getting channel info for: {title}", "Loading Channel...")
+            threading.Thread(target=self.fetch_channel_data_thread, args=(item_url, title)).start()
+        else:
+            wx.MessageBox(f"Unknown item type: {item_type}", "Error", wx.OK | wx.ICON_ERROR)
+
+    def _fetch_and_play_video(self, youtube_url, title, format_selector, play_as_audio=False):
         """Worker thread to fetch stream info and create the player."""
         try:
-            wx.CallAfter(self.show_loading_dialog, f"Playing: {title}...")
+            dialog_title_str = "Playing audio..." if play_as_audio else "Playing..."
+            loading_message = f"Playing audio: {title}..." if play_as_audio else f"Playing: {title}..."
+            wx.CallAfter(self.show_loading_dialog, loading_message, dialog_title_str)
 
             info_dict = run_yt_dlp_json(youtube_url, format_selector=format_selector)
             if not info_dict:
@@ -208,19 +252,82 @@ class FavoritesFrame(wx.Frame):
             if not media_url:
                 formats = info_dict.get('formats', [])
                 if formats:
-                    media_url = formats[0].get('url')
+                    media_url = formats[0].get('url') 
             if not media_url:
-                raise ValueError("No playable URL found in yt-dlp output.")
+                raise ValueError("No playable URL found in yt-dlp output.")            
             wx.CallAfter(self._create_and_show_player, title, media_url, description, youtube_url)
 
         except Exception as e:
             wx.CallAfter(self.destroy_loading_dialog)
-            wx.CallAfter(wx.MessageBox, f"Could not play the video: {e}", "Playback Error", wx.OK | wx.ICON_ERROR)
+            wx.CallAfter(wx.MessageBox, f"Could not play: {e}", "Playback Error", wx.OK | wx.ICON_ERROR)
             wx.CallAfter(self.Show)
+
+    def fetch_playlist_items_thread(self, playlist_url, playlist_title):
+        """Worker thread to fetch playlist items."""
+        playlist_items = []
+        error_message = None
+        try:
+            info_dict = run_yt_dlp_json(playlist_url, is_search=True)
+            if info_dict and 'entries' in info_dict:
+                playlist_items = info_dict['entries']
+            elif info_dict:
+                error_message = "Failed to fetch playlist items: Unexpected data structure."
+            
+        except Exception as e:
+            error_message = f"Error fetching playlist items for '{playlist_title}': {e}"
+        wx.PostEvent(self, FavPlaylistItemsFetchEvent(items=playlist_items, error=error_message, title=playlist_title))
+
+    def onPlaylistItemsFetched(self, event):
+        """Handles the completion of playlist item fetching."""
+        self.destroy_loading_dialog()
+        items = event.items
+        error = event.error
+        playlist_title = event.title
+
+        if error:
+            wx.MessageBox(error, "Playlist Error", wx.OK | wx.ICON_ERROR)
+            self.Show() 
+        elif items:
+            from .youtube_search import YoutubeSearchResults
+            playlist_viewer_frame = YoutubeSearchResults(self.parent, items, is_playlist_view=True, original_search_frame=self)
+            playlist_viewer_frame.Show()
+        else:
+            wx.MessageBox(f"No items found in the playlist '{playlist_title}' or an error occurred.", "Playlist Empty", wx.OK | wx.ICON_INFORMATION)
+            self.Show()
+
+    def fetch_channel_data_thread(self, channel_url, channel_title):
+        """Worker thread to fetch channel data."""
+        channel_data = None
+        error_message = None
+        try:
+            info_dict = run_yt_dlp_json(channel_url, is_search=True)
+            if info_dict:
+                channel_data = info_dict
+        except Exception as e:
+            error_message = f"Error getting channel data for '{channel_title}': {e}"
+        wx.PostEvent(self, FavChannelDataFetchEvent(data=channel_data, error=error_message, title=channel_title))
+
+    def onChannelDataFetched(self, event):
+        """Handles the completion of channel data fetching."""
+        self.destroy_loading_dialog()
+        channel_data = event.data
+        error = event.error
+        channel_title = event.title
+
+        if error:
+            wx.MessageBox(error, "Channel Error", wx.OK | wx.ICON_ERROR)
+            self.Show()
+        elif channel_data:
+            from .channel_viewer import ChannelViewerFrame
+            channel_viewer_frame = ChannelViewerFrame(self, channel_data)
+            channel_viewer_frame.Show()
+        else:
+            wx.MessageBox(f"No data found for the channel '{channel_title}' or an error occurred.", "Channel Error", wx.OK | wx.ICON_INFORMATION)
+            self.Show()
 
     def _create_and_show_player(self, title, media_url, description, original_youtube_link):
         """Creates and shows the YoutubePlayer (must be on the main thread)."""
-        self.player = YoutubePlayer(self, title, media_url, None, description, original_youtube_link, None, None)
+        self.player = YoutubePlayer(None, title, media_url, self, description, original_youtube_link, None, -1)
         self.player.Bind(EVT_VLC_READY, self.show_when_ready)
         self.player.Bind(wx.EVT_CLOSE, self.player.OnClose)
 
@@ -232,40 +339,67 @@ class FavoritesFrame(wx.Frame):
             self.player.Show()
         event.Skip()
 
+    def show_loading_dialog(self, message, dialog_title="Loading..."):
+        if hasattr(self, 'loading_dialog') and self.loading_dialog:
+            try:
+                self.loading_dialog.Destroy()
+            except RuntimeError:
+                pass
+            self.loading_dialog = None
+
+        self.loading_dialog = wx.Dialog(self, title=dialog_title, style=wx.CAPTION)
+        loading_text = wx.StaticText(self.loading_dialog, -1, message)
+        loading_sizer = wx.BoxSizer(wx.VERTICAL)
+        loading_sizer.Add(loading_text, 0, wx.ALL | wx.CENTER, 10)
+        self.loading_dialog.SetSizer(loading_sizer)
+        self.loading_dialog.Show()
+        wx.Yield()
+
     def destroy_loading_dialog(self):
         if hasattr(self, 'loading_dialog') and self.loading_dialog:
             self.loading_dialog.Destroy()
             self.loading_dialog=None
 
     def onDownloadSelectedVideo(self, event):
-        """Opens the download settings dialog for the selected video."""
-        selected_video = self.get_selected_video_info()
-        if selected_video:
-            video_url = selected_video.get('youtube_url')
-            video_title = selected_video.get('title', 'Untitled')
+        selected_item = self.get_selected_video_info()
+        if selected_item:
+            video_url = selected_item.get('youtube_url')
+            video_title = selected_item.get('title', 'Untitled')
+            item_type = selected_item.get('type', 'video')
             if not video_url:
-                 wx.MessageBox(f"Could not find URL for '{video_title}'.", "Download Error", wx.OK | wx.ICON_ERROR)
-                 return
+                wx.MessageBox(f"Could not find the link for '{video_title}'.", "Download Error", wx.OK | wx.ICON_ERROR)
+                return
+            
+            if item_type == 'channel':
+                wx.MessageBox("Channels cannot be downloaded directly from favorites. Please open the channel to download specific content.", "Info", wx.OK | wx.ICON_INFORMATION)
+                return
 
             settings_dialog = DownloadSettingsDialog(self, "Download Settings", video_title, video_url)
             if settings_dialog.ShowModal() == wx.ID_OK:
                 download_settings = settings_dialog.settings
+                if item_type == 'playlist':
+                    download_settings['is_playlist'] = True
+                    wx.MessageBox("Note: Downloading entire playlists uses default yt-dlp behavior for the playlist URL. Individual item download settings apply if yt-dlp processes it as a single item.", "Playlist Download", wx.OK | wx.ICON_INFORMATION)
                 self.start_download_process(download_settings)
             settings_dialog.Destroy()
         else:
-            wx.MessageBox("Please select a video to download.", "No Selection", wx.OK | wx.ICON_INFORMATION)
+            wx.MessageBox("Please select an item to download.", "No Selection", wx.OK | wx.ICON_INFORMATION)
 
     def onDirectDownload(self, event):
-        """Directly downloads the selected video using default settings."""
-        selected_video = self.get_selected_video_info()
-        if not selected_video:
-            wx.MessageBox("Please select a video to download.", "No Selection", wx.OK | wx.ICON_INFORMATION)
+        selected_item = self.get_selected_video_info()
+        if not selected_item:
+            wx.MessageBox("Please select an item to download.", "No Selection", wx.OK | wx.ICON_INFORMATION)
             return
 
-        video_url = selected_video.get('youtube_url')
-        video_title = selected_video.get('title', 'Untitled')
+        video_url = selected_item.get('youtube_url')
+        video_title = selected_item.get('title', 'Untitled')
+        item_type = selected_item.get('type', 'video')
         if not video_url:
-            wx.MessageBox(f"Could not find URL for '{video_title}'.", "Download Error", wx.OK | wx.ICON_ERROR)
+            wx.MessageBox(f"Could not find the link for '{video_title}'.", "Download Error", wx.OK | wx.ICON_ERROR)
+            return
+
+        if item_type == 'channel':
+            wx.MessageBox("Channels cannot be directly downloaded. Please open the channel to download its content.", "Info", wx.OK | wx.ICON_INFORMATION)
             return
 
         if not self.default_download_directory or not os.path.isdir(self.default_download_directory):
@@ -281,6 +415,9 @@ class FavoritesFrame(wx.Frame):
             'audio_format': self.default_audio_format,
             'audio_quality': self.default_audio_quality,
         }
+        if item_type == 'playlist':
+            download_settings['is_playlist'] = True
+            wx.MessageBox("Note: Direct downloading entire playlists uses default yt-dlp behavior.", "Playlist Direct Download", wx.OK | wx.ICON_INFORMATION)        
         self.start_download_process(download_settings)
 
     def start_download_process(self, download_settings):
@@ -290,25 +427,43 @@ class FavoritesFrame(wx.Frame):
         download_dlg.download_task()
 
     def onRemoveFromFavorites(self, event):
-        """Removes the selected video from favorites."""
-        selected_video = self.get_selected_video_info()
-        if selected_video:
-            video_url = selected_video.get('youtube_url')
-            if self.favorites_manager.remove_favorite(video_url):
-                speak("Removed from favorites.")
+        selected_item = self.get_selected_video_info()
+        if selected_item:
+            item_url = selected_item.get('youtube_url')
+            success, message = self.favorites_manager.remove_favorite(item_url)
+            if success:
+                speak(message) # Message already includes item type
                 self.current_favorites = self.favorites_manager.get_favorites_list()
                 self.populate_listbox()
+                sel_idx = self.favorites_listbox.GetSelection()
+                if sel_idx == -1 and self.favorites_listbox.GetCount() > 0:
+                    self.favorites_listbox.SetSelection(0)
+                elif sel_idx >= self.favorites_listbox.GetCount() and self.favorites_listbox.GetCount() > 0:
+                    self.favorites_listbox.SetSelection(self.favorites_listbox.GetCount() -1) # Select last if previous was out of bounds
             else:
-                 speak("Failed to remove from favorites.")
+                speak(message)
 
     def onKey(self, event):
         keycode = event.GetKeyCode()
+        modifiers = event.GetModifiers()
         selection = self.favorites_listbox.GetSelection()
+        if selection == -1:
+            event.Skip()
+            return
 
-        if keycode == wx.WXK_SPACE and selection != -1:
+        selected_item = self.get_selected_video_info()
+        item_type = selected_item.get('item_type', 'video')
+
+        if keycode == wx.WXK_SPACE:
            self.onRemoveFromFavorites(event)
-        elif keycode == wx.WXK_RETURN and selection != -1:
-           self.onPlay(event)
+        elif keycode == wx.WXK_RETURN:
+           if modifiers == wx.MOD_CONTROL:
+               if item_type == 'video':
+                   self.onPlay(event, play_as_audio=True)
+               else:
+                   wx.MessageBox(f"Cannot play {item_type}s as audio directly. Please open the {item_type} first.", "Info", wx.OK | wx.ICON_INFORMATION)
+           else:
+               self.onPlay(event, play_as_audio=False)
         elif keycode == wx.WXK_ESCAPE:
            self.Close()
         else:
@@ -318,25 +473,38 @@ class FavoritesFrame(wx.Frame):
         selection = self.favorites_listbox.GetSelection()
         if selection == -1:
             return
+        selected_item = self.get_selected_video_info()
+        if not selected_item: return
 
+        item_type = selected_item.get('type', 'video')
         if self.context_menu:
             self.context_menu.Destroy()
         self.context_menu = wx.Menu()
-
-        play_item = self.context_menu.Append(wx.ID_ANY, "Play")
-        self.Bind(wx.EVT_MENU, self.onPlay, play_item)
-
+        if item_type == 'video':
+            play_menu = wx.Menu()
+            play_video_item = play_menu.Append(wx.ID_ANY, "Play as video")
+            play_audio_item = play_menu.Append(wx.ID_ANY, "Play as audio")
+            self.context_menu.AppendSubMenu(play_menu, "Play")
+            self.Bind(wx.EVT_MENU, lambda evt, ia=False: self.onPlay(evt, play_as_audio=ia), play_video_item)
+            self.Bind(wx.EVT_MENU, lambda evt, ia=True: self.onPlay(evt, play_as_audio=ia), play_audio_item)
+        elif item_type == 'playlist':
+            open_playlist_item = self.context_menu.Append(wx.ID_ANY, "Open Playlist")
+            self.Bind(wx.EVT_MENU, self.onPlay, open_playlist_item) 
+        elif item_type == 'channel':
+            open_channel_item = self.context_menu.Append(wx.ID_ANY, "Open Channel")
+            self.Bind(wx.EVT_MENU, self.onPlay, open_channel_item)
+                
         copy_item = self.context_menu.Append(wx.ID_ANY, "Copy Video Link")
         self.Bind(wx.EVT_MENU, self.onCopyLinkFromMenu, copy_item)
 
-        download_item = self.context_menu.Append(wx.ID_ANY, "Download video...")
-        self.Bind(wx.EVT_MENU, self.onDownloadSelectedVideo, download_item)
+        if item_type == 'video' or item_type == 'playlist':
+            download_item = self.context_menu.Append(wx.ID_ANY, f"Download {item_type.capitalize()}...")
+            self.Bind(wx.EVT_MENU, self.onDownloadSelectedVideo, download_item)
 
-        direct_download_item = self.context_menu.Append(wx.ID_ANY, "Direct Download")
-        self.Bind(wx.EVT_MENU, self.onDirectDownload, direct_download_item)
-
-        show_description_item = self.context_menu.Append(wx.ID_ANY, "Video description")
-        self.context_menu.Append(show_description_item)
+            direct_download_item = self.context_menu.Append(wx.ID_ANY, f"Direct Download {item_type.capitalize()}")
+            self.Bind(wx.EVT_MENU, self.onDirectDownload, direct_download_item)
+        
+        show_description_item = self.context_menu.Append(wx.ID_ANY, f"{item_type.capitalize()} Description")
         self.Bind(wx.EVT_MENU, self.onShowDescription, show_description_item)
 
         remove_item = self.context_menu.Append(wx.ID_ANY, "Remove from Favorites")
@@ -347,17 +515,19 @@ class FavoritesFrame(wx.Frame):
         selected_video = self.get_selected_video_info()
         if selected_video:
             url = selected_video.get('youtube_url')
+            item_type = selected_video.get('type', 'item')
             if url:
                 clipboard = wx.Clipboard.Get()
                 if clipboard.Open():
-                    text_data = wx.TextDataObject(url)
-                    clipboard.SetDataObject(text_data)
+                    text_data = wx.TextDataObject()
+                    text_data.SetText(url)
+                    clipboard.SetData(text_data)
                     clipboard.Close()
-                    speak("Link copyed to clipboard", interrupt=True)
+                    speak(f"{item_type} link copyed to clipboard", interrupt=True)
                 else:
                     wx.MessageBox("Could not access clipboard.", "Error", wx.OK | wx.ICON_ERROR)
             else:
-                 wx.MessageBox("No URL available for this favorite.", "Error", wx.OK | wx.ICON_INFORMATION)
+                 wx.MessageBox("No link is available for this favorite.", "Error", wx.OK | wx.ICON_INFORMATION)
         else:
             wx.MessageBox("Please select a video first", "Error", wx.OK | wx.ICON_INFORMATION)
 
@@ -373,8 +543,14 @@ class FavoritesFrame(wx.Frame):
              wx.MessageBox(f"Could not find URL for '{video_title}'.", "Description Error", wx.OK | wx.ICON_ERROR)
              return
 
-        self.show_loading_dialog(f"Fetching description for: {video_title}")
-        threading.Thread(target=self.fetch_description_thread, args=(video_url,)).start()
+        # Check if description is already stored in the favorite item
+        if 'description' in selected_video and selected_video['description'] is not None:
+            desc_dlg = DescriptionDialog(self, f"{video_title} Description", selected_video['description'])
+            desc_dlg.ShowModal()
+            desc_dlg.Destroy()
+        else:
+            self.show_loading_dialog(f"Fetching description for: {video_title}")
+            threading.Thread(target=self.fetch_description_thread, args=(video_url,)).start()
 
     def fetch_description_thread(self, video_url):
         """Worker thread to fetch video description using yt-dlp."""
@@ -415,15 +591,6 @@ class FavoritesFrame(wx.Frame):
              wx.MessageBox("Description not available for this video.", "Description Unavailable", wx.OK | wx.ICON_INFORMATION)
 
 
-    def show_loading_dialog(self, message):
-        self.loading_dialog = wx.Dialog(self, title="Playing...", style=wx.CAPTION)
-        loading_text = wx.StaticText(self.loading_dialog, -1, message)
-        loading_sizer = wx.BoxSizer(wx.VERTICAL)
-        loading_sizer.Add(loading_text, 0, wx.ALL | wx.CENTER, 10)
-        self.loading_dialog.SetSizer(loading_sizer)
-        self.loading_dialog.Show()
-        wx.Yield()
-
     def onClose(self, event):
         if hasattr(self, 'player') and self.player:
             self.player.Close()
@@ -432,6 +599,4 @@ class FavoritesFrame(wx.Frame):
                  self.loading_dialog.Destroy()
              except Exception:
                  pass
-        if self.parent:
-            wx.CallAfter(self.parent.Show)
         self.Destroy()

@@ -448,7 +448,7 @@ class YoutubePlayer(wx.Frame):
             self.player.release()
             self.instance.release()
             self.player = None
-        threading.Thread(target=self.get_direct_link_and_play, args=(selected_video['link'], selected_video['title'], False)).start()
+        threading.Thread(target=self.get_direct_link_and_play, args=(selected_video['webpage_url'], selected_video['title'], False)).start()
 
     def get_direct_link_and_play(self, url, title, play_as_audio=False):
         # This function is called when navigating next/previous
