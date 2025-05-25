@@ -27,6 +27,13 @@ class YoutubeSettings(SettingsPanel):
         playback_sizer.Add(self.volume_spin, 0, wx.ALL | wx.EXPAND, 5)
         self.volume_spin.Bind(wx.EVT_SPINCTRL, self.on_setting_change)
 
+        search_results_label = wx.StaticText(self, label="Number of search results:")
+        search_results_choices = ["5", "10", "20", "30", "50", "100", "200", "250", "300", "350", "400", "450", "500", "automatic"]
+        self.search_results_combo = wx.ComboBox(self, choices=search_results_choices, style=wx.CB_READONLY)
+        playback_sizer.Add(search_results_label, 0, wx.ALL | wx.EXPAND, 5)
+        playback_sizer.Add(self.search_results_combo, 0, wx.ALL | wx.EXPAND, 5)
+        self.search_results_combo.Bind(wx.EVT_COMBOBOX, self.on_setting_change)
+
         quality_label = wx.StaticText(self, label="Video playback Quality:")
         self.quality_combo = wx.ComboBox(self, choices=["Low", "Medium", "Best"], style=wx.CB_READONLY)
         self.quality_combo.SetValue("Medium")
@@ -108,6 +115,12 @@ class YoutubeSettings(SettingsPanel):
         self.rewind_spin.SetValue(int(youtube_settings.get('rewind_interval', 5)))
         self.volume_spin.SetValue(int(youtube_settings.get('default_volume', 80)))
         self.quality_combo.SetValue(youtube_settings.get('video_quality', "Medium"))
+        num_results_setting = youtube_settings.get('search_results_count', "5")
+        if num_results_setting in self.search_results_combo.GetItems():
+            self.search_results_combo.SetValue(num_results_setting)
+        else:
+            self.search_results_combo.SetValue("5")
+
         post_playback_action = youtube_settings.get('post_playback_action', 'Close player')
         if post_playback_action in self.post_playback_combo.GetItems():
             self.post_playback_combo.SetValue(post_playback_action)
@@ -136,6 +149,7 @@ class YoutubeSettings(SettingsPanel):
         self.config['YouTube']['rewind_interval'] = self.rewind_spin.GetValue()
         self.config['YouTube']['default_volume'] = self.volume_spin.GetValue()
         self.config['YouTube']['video_quality'] = self.quality_combo.GetValue()
+        self.config['YouTube']['search_results_count'] = self.search_results_combo.GetValue()
         self.config['YouTube']['post_playback_action'] = self.post_playback_combo.GetValue()
         self.config['YouTube']['yt_dlp_update_channel'] = self.update_channel_combo.GetValue()
         self.config['YouTube']['default_download_type'] = self.default_type_combo.GetValue()

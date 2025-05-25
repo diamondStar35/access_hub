@@ -68,7 +68,7 @@ class FavoritesManager:
             info = {
                 'title': video_info.get('title', 'Untitled'),
                 'youtube_url': video_url,
-                'type': video_info.get('item_type', 'video'),
+                'type': video_info.get('type', 'video'),
             }
             if 'description' in video_info and video_info['description'] is not None:
                 info['description'] = video_info['description']            
@@ -452,7 +452,7 @@ class FavoritesFrame(wx.Frame):
             return
 
         selected_item = self.get_selected_video_info()
-        item_type = selected_item.get('item_type', 'video')
+        item_type = selected_item.get('type', 'video')
 
         if keycode == wx.WXK_SPACE:
            self.onRemoveFromFavorites(event)

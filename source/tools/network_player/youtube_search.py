@@ -93,8 +93,21 @@ class YoutubeSearchDialog(wx.Dialog):
     def search_youtube(self, search_term):
         """Performs YouTube search using yt-dlp."""
         results_list = []
-        search_query_url = f"ytsearch10:{search_term}"
-        
+        config_path = os.path.join(wx.StandardPaths.Get().GetUserConfigDir(), app_vars.app_name, "settings.ini")
+        config = ConfigObj(config_path)
+        youtube_settings = config.get('YouTube', {})
+        search_results_count_str = youtube_settings.get('search_results_count', "5")
+
+        search_query_url = ""
+        if search_results_count_str.lower() == "automatic":
+            search_query_url = f"ytsearchall:{search_term}"
+        else:
+            try:
+                num_results = int(search_results_count_str)
+                search_query_url = f"ytsearch{num_results}:{search_term}"
+            except ValueError:
+                search_query_url = f"ytsearch5:{search_term}"
+                
         try:
             info_dict = run_yt_dlp_json(search_query_url, is_search=True)             
             if info_dict and 'entries' in info_dict:
@@ -117,9 +130,10 @@ class YoutubeSearchDialog(wx.Dialog):
 
 
 class YoutubeSearchResults(wx.Frame):
-    def __init__(self, parent, results_list, is_playlist_view=False, original_search_frame=None):
+    def __init__(self, parent, results_list, is_playlist_view=False, original_search_frame=None, playlist_uploader=None):
         self.is_playlist_view = is_playlist_view
         self.original_search_frame = original_search_frame 
+        self.playlist_uploader = playlist_uploader
         title = "Playlist Viewer" if is_playlist_view else "Search Results"
         super().__init__(parent, title=title, size=(800, 650), style=wx.DEFAULT_DIALOG_STYLE| wx.RESIZE_BORDER)
         self.player=None
@@ -162,15 +176,19 @@ class YoutubeSearchResults(wx.Frame):
 
 
     def is_item_playlist(self, item_data):
-        """Checks if the given yt-dlp item data represents a playlist."""
+        """
+        Checks if the given yt-dlp item data represents a playlist and returns its status and count.
+        Returns:
+            dict: {'is_playlist': bool, 'count': int or None}
+        """
         if isinstance(item_data, dict):
             item_type = item_data.get('_type')
             ie_key = item_data.get('ie_key', '').lower()
             if item_type == 'playlist' or item_type == 'playlist_result':
-                return True
-            if 'playlist' in ie_key:
-                return True
-        return False
+                return {'is_playlist': True, 'count': item_data.get('playlist_count')}
+            if 'playlist' in ie_key: # Covers cases like 'youtube:playlist'
+                return {'is_playlist': True, 'count': item_data.get('playlist_count')}
+        return {'is_playlist': False, 'count': None}
 
     def is_item_channel(self, item_data):
         """Checks if the given yt-dlp item data represents a channel from search results."""
@@ -188,9 +206,16 @@ class YoutubeSearchResults(wx.Frame):
         for result_item in results:
             title = result_item.get('title', 'Untitled Video')
             webpage_url = result_item.get('url')
+            uploader = 'Unknown Uploader'
+            if self.is_playlist_view and self.playlist_uploader:
+                uploader = self.playlist_uploader
+            else:
+                uploader = result_item.get('channel') or result_item.get('uploader', 'Unknown Uploader')
+
             duration_seconds = result_item.get('duration')
-            uploader = result_item.get('channel') or result_item.get('uploader', 'Unknown Uploader')
-            is_playlist = self.is_item_playlist(result_item)
+            playlist_info = self.is_item_playlist(result_item)
+            is_playlist = playlist_info['is_playlist']
+            playlist_item_count = playlist_info['count']
             is_channel = self.is_item_channel(result_item)
 
             item_text = ""
@@ -199,7 +224,10 @@ class YoutubeSearchResults(wx.Frame):
                 item_text = f"{title}: Channel"
                 item_type_for_fav = 'channel'
             elif is_playlist:
-                item_text = f"{title}: Playlist"
+                if playlist_item_count is not None:
+                    item_text = f"{title}: A playlist containing {playlist_item_count} videos (by {uploader})"
+                else:
+                    item_text = f"{title}: Playlist (by {uploader})"
                 item_type_for_fav = 'playlist'
             else:
                 duration_display = self.format_duration(duration_seconds)
@@ -212,6 +240,7 @@ class YoutubeSearchResults(wx.Frame):
                 'duration': duration_seconds,
                 'uploader': uploader,
                 'is_playlist': is_playlist,
+                'playlist_count': playlist_item_count,
                 'is_channel': is_channel,
                 'type': item_type_for_fav,
                 '_original_item_data': result_item
@@ -263,16 +292,17 @@ class YoutubeSearchResults(wx.Frame):
         elif item_info.get('is_playlist'):
             playlist_url = item_info.get('webpage_url')
             playlist_title = item_info.get('title', 'Untitled Playlist')
+            playlist_uploader = item_info.get('uploader')
             if playlist_url:
                 self.show_loading_dialog(f"Getting playlist info for: {playlist_title}", "Loading Playlist...")
-                threading.Thread(target=self.fetch_playlist_items_thread, args=(playlist_url,)).start()
+                threading.Thread(target=self.fetch_playlist_items_thread, args=(playlist_url, playlist_uploader)).start()
             else:
                 wx.MessageBox("Playlist link is missing or not found.", "Error", wx.OK | wx.ICON_ERROR)
         else:
             self.onPlay(event, item_info=item_info, play_as_audio=False)
         if event: event.Skip()
     
-    def fetch_playlist_items_thread(self, playlist_url):
+    def fetch_playlist_items_thread(self, playlist_url, playlist_uploader=None):
         """Worker thread to fetch playlist items using yt-dlp."""
         playlist_items = []
         error_message = None
@@ -286,20 +316,22 @@ class YoutubeSearchResults(wx.Frame):
         except Exception as e:
             error_message = f"Error fetching playlist items: {e}"
 
-        wx.PostEvent(self, PlaylistItemsFetchEvent(items=playlist_items, error=error_message))
+        wx.PostEvent(self, PlaylistItemsFetchEvent(items=playlist_items, error=error_message, playlist_uploader=playlist_uploader))
 
     def onPlaylistItemsFetched(self, event):
         """Handles the completion of playlist item fetching."""
         self.destroy_loading_dialog()
         items = event.items
         error = event.error
+        playlist_uploader = event.playlist_uploader
 
         if error:
             wx.MessageBox(error, "Playlist Error", wx.OK | wx.ICON_ERROR)
         elif items:
-            playlist_viewer_frame = YoutubeSearchResults(self.parent, items, is_playlist_view=True, original_search_frame=self)
+            playlist_viewer_frame = YoutubeSearchResults(self.parent, items, is_playlist_view=True, original_search_frame=self, playlist_uploader=playlist_uploader)
             playlist_viewer_frame.Show()
-            self.Hide()
+            if self.IsShown(): # Only hide if currently shown, avoids issues if already hidden.
+                 self.Hide()
         else:
             wx.MessageBox("No items found in the playlist or an error occurred.", "Playlist Empty", wx.OK | wx.ICON_INFORMATION)
 
@@ -526,9 +558,12 @@ class YoutubeSearchResults(wx.Frame):
         else:
            event.Skip()
 
-    def onToggleFavorite(self, event):
+    def onToggleFavorite(self, event, item_info=None):
         """Adds or removes the selected item from favorites."""
-        current_item_info = self.get_selected_item_info_from_listbox()
+        if item_info is not None:
+            current_item_info=item_info
+        else:
+            current_item_info = self.get_selected_item_info_from_listbox()
         if not current_item_info:
             wx.MessageBox("Please select an item first.", "No Selection", wx.OK | wx.ICON_INFORMATION)
             return
@@ -536,7 +571,7 @@ class YoutubeSearchResults(wx.Frame):
         fav_entry_info = {
             'title': current_item_info.get('title'),
             'webpage_url': current_item_info.get('webpage_url'),
-            'type': current_item_info.get('item_type'), 
+            'type': current_item_info.get('type'),
             'description': current_item_info.get('_original_item_data', {}).get('description')
         }
         

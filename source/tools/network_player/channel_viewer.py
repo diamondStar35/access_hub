@@ -26,7 +26,6 @@ class ChannelViewerFrame(wx.Frame):
 
         self.panel = wx.Panel(self)
         self.notebook = wx.Notebook(self.panel)
-
         self.info_panel = wx.Panel(self.notebook)
         info_sizer = wx.BoxSizer(wx.VERTICAL)
         self.info_text_ctrl = wx.TextCtrl(self.info_panel, style=wx.TE_MULTILINE | wx.TE_READONLY | wx.HSCROLL)
@@ -41,29 +40,37 @@ class ChannelViewerFrame(wx.Frame):
         content_sizer.Add(wx.StaticText(self.content_panel, label="Channel Content:"), 0, wx.ALL, 5)
         content_sizer.Add(self.content_list_ctrl, 1, wx.EXPAND | wx.ALL, 5)
 
-        buttons_panel = wx.Panel(self.content_panel)
-        buttons_sizer = wx.BoxSizer(wx.HORIZONTAL)
-        play_button = wx.Button(buttons_panel, label="Play/Open")
-        download_button = wx.Button(buttons_panel, label="Download")
-        close_button = wx.Button(buttons_panel, label="Close Viewer")
-        buttons_sizer.Add(play_button, 0, wx.ALL, 5)
-        buttons_sizer.Add(download_button, 0, wx.ALL, 5)
-        buttons_sizer.AddStretchSpacer(1)
-        buttons_sizer.Add(close_button, 0, wx.ALL, 5)
-        buttons_panel.SetSizer(buttons_sizer)
-        content_sizer.Add(buttons_panel, 0, wx.EXPAND | wx.ALL, 5)
+        content_buttons_panel = wx.Panel(self.content_panel)
+        content_buttons_sizer = wx.BoxSizer(wx.HORIZONTAL)
+        play_button = wx.Button(content_buttons_panel, label="Open")
+        download_button = wx.Button(content_buttons_panel, label="Download")
+        
+        content_buttons_sizer.Add(play_button, 0, wx.ALL, 5)
+        content_buttons_sizer.Add(download_button, 0, wx.ALL, 5)
+        content_buttons_sizer.AddStretchSpacer(1) 
+        content_buttons_panel.SetSizer(content_buttons_sizer)
+        content_sizer.Add(content_buttons_panel, 0, wx.EXPAND | wx.ALL, 5)
 
         self.content_panel.SetSizer(content_sizer)
         self.notebook.AddPage(self.content_panel, "Content")
         self._populate_content_list_tab()
 
-        sizer = wx.BoxSizer(wx.VERTICAL)
-        sizer.Add(self.notebook, 1, wx.EXPAND | wx.ALL, 5)
-        self.panel.SetSizer(sizer)
+        main_sizer = wx.BoxSizer(wx.VERTICAL)
+        main_sizer.Add(self.notebook, 1, wx.EXPAND | wx.ALL, 5)
+
+        close_button_panel = wx.Panel(self.panel)
+        close_button_sizer = wx.BoxSizer(wx.HORIZONTAL)
+        self.close_viewer_button = wx.Button(close_button_panel, label="Close")
+        close_button_sizer.AddStretchSpacer(1)
+        close_button_sizer.Add(self.close_viewer_button, 0, wx.ALL, 5)
+        close_button_panel.SetSizer(close_button_sizer)        
+        main_sizer.Add(close_button_panel, 0, wx.EXPAND | wx.LEFT | wx.RIGHT | wx.BOTTOM, 5)
+        
+        self.panel.SetSizer(main_sizer)
         self.Centre()
 
         self.Bind(wx.EVT_CLOSE, self.on_viewer_close)
-        close_button.Bind(wx.EVT_BUTTON, lambda evt: self.Close())
+        self.close_viewer_button.Bind(wx.EVT_BUTTON, lambda evt: self.Close())
         play_button.Bind(wx.EVT_BUTTON, self.on_item_play_open_handler)
         download_button.Bind(wx.EVT_BUTTON, self.on_item_download_handler)
         self.content_list_ctrl.Bind(wx.EVT_LISTBOX_DCLICK, self.on_item_play_open_handler)
@@ -122,11 +129,16 @@ class ChannelViewerFrame(wx.Frame):
         self.content_list_ctrl.Clear()
         for item_data in self.channel_items_list:
             title = item_data.get('title', 'Untitled Item')
-            is_playlist = self.parent_search_results_frame.is_item_playlist(item_data)
+            playlist_info_dict = self.parent_search_results_frame.is_item_playlist(item_data)
+            is_playlist = playlist_info_dict['is_playlist']
+            playlist_item_count = playlist_info_dict['count']
 
             item_text = ""
             if is_playlist:
-                item_text = f"{title}: Playlist"
+                if playlist_item_count is not None:
+                    item_text = f"{title}: A playlist containing {playlist_item_count} videos"
+                else:
+                    item_text = f"{title}: Playlist"
             else:
                 duration_str = self.parent_search_results_frame.format_duration(item_data.get('duration'))
                 uploader_str = item_data.get('uploader') or item_data.get('channel') or self.channel_info.get('title', 'Unknown')
@@ -144,15 +156,29 @@ class ChannelViewerFrame(wx.Frame):
         """Converts an item from channel_items_list to the format expected by parent handlers."""
         if not original_item_data: return None
         webpage_url = original_item_data.get('webpage_url') or original_item_data.get('url')
-        return {
+        playlist_info_dict = self.parent_search_results_frame.is_item_playlist(original_item_data)
+        is_playlist = playlist_info_dict['is_playlist']
+        playlist_count = playlist_info_dict['count']
+        item_type_for_fav = 'video'
+        if is_playlist:
+            item_type_for_fav = 'playlist'
+
+        item_info = {
             'title': original_item_data.get('title', 'Untitled'),
             'webpage_url': webpage_url,
             'duration': original_item_data.get('duration'),
             'uploader': original_item_data.get('uploader') or original_item_data.get('channel') or self.channel_info.get('title', 'Unknown'),
-            'is_playlist': self.parent_search_results_frame.is_item_playlist(original_item_data),
-            'is_channel': False,
+            'is_playlist': is_playlist,
+            'is_channel': False, # This handler is for items within a channel, so they are not channels themselves
+            'type': item_type_for_fav, # Crucial for favorites
             '_original_item_data': original_item_data
         }
+        
+        if is_playlist:
+            # If it's a playlist within the channel, pass the channel's uploader as context
+            item_info['playlist_uploader'] = self.channel_info.get('uploader') or self.channel_info.get('title', 'Unknown Channel')
+            
+        return item_info
 
     def on_item_play_open_handler(self, event):
         selected_original_item = self.get_selected_content_item_info_dict()
@@ -160,11 +186,15 @@ class ChannelViewerFrame(wx.Frame):
             if event: event.Skip()
             return
 
-        is_playlist = self.parent_search_results_frame.is_item_playlist(selected_original_item)
+        playlist_info_dict = self.parent_search_results_frame.is_item_playlist(selected_original_item)
+        is_playlist = playlist_info_dict['is_playlist']
+        item_info_for_parent = self._prepare_item_info_for_parent_handler(selected_original_item)
+        if not item_info_for_parent:
+            if event: event.Skip()
+            return
+
         if is_playlist:
-            item_info_for_parent = self._prepare_item_info_for_parent_handler(selected_original_item)
-            if item_info_for_parent:
-                self.parent_search_results_frame.onPlayOrOpenPlaylist(event=None, item_info=item_info_for_parent)
+            self.parent_search_results_frame.onPlayOrOpenPlaylist(event=None, item_info=item_info_for_parent)
         else:
             self.play_channel_video(selected_original_item, play_as_audio=False)
         if event: event.Skip()
