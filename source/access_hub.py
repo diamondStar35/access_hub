@@ -102,12 +102,8 @@ class AccessHub(wx.Frame):
         self.initialize_notifications()
         self.create_menu_bar()
 
-        # Set a pleasing background color
-        self.SetBackgroundColour(wx.Colour(240, 240, 240))  # Light gray background
-
         # Create a panel to hold the buttons
         panel = wx.Panel(self, wx.ID_ANY)
-        panel.SetBackgroundColour(wx.Colour(230, 230, 230)) # Slightly darker gray for contrast
 
         # Create a sizer for flexible layout
         sizer = wx.BoxSizer(wx.VERTICAL)
@@ -124,8 +120,7 @@ class AccessHub(wx.Frame):
 
         # Create the ListCtrl
         self.tool_list_ctrl = wx.ListCtrl(panel, style=wx.LC_REPORT | wx.LC_SINGLE_SEL | wx.LC_VRULES | wx.LC_HRULES)
-        self.tool_list_ctrl.SetFont(wx.Font(10, wx.FONTFAMILY_SWISS, wx.FONTSTYLE_NORMAL, wx.FONTWEIGHT_NORMAL))
-        self.tool_list_ctrl.SetBackgroundColour(wx.Colour(250, 250, 250)) # Slightly lighter for the list
+        self.tool_list_ctrl.SetFont(wx.Font(14, wx.FONTFAMILY_SWISS, wx.FONTSTYLE_NORMAL, wx.FONTWEIGHT_NORMAL))
         self.tool_list_ctrl.Bind(wx.EVT_LIST_ITEM_ACTIVATED, self.on_run_tool)
 
         # Add columns
