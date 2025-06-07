@@ -1,7 +1,9 @@
 import wx
 import wx.adv
 import wx.lib.newevent
-import os, sys, subprocess, re, platform, shutil, json, socket
+import app_guard
+from app_guard import AppGuard, AppGuardError, IPCMsg
+import os, sys, subprocess, re, platform, shutil, json
 import app_vars
 from gui.settings import SettingsDialog, GeneralSettingsPanel, load_app_config, get_settings_path
 from gui.dialogs import AccessTaskBarIcon, ContactDialog, AboutDialog
@@ -39,9 +41,8 @@ import wave
 
 
 # Constants for IPC
-IPC_PORT = 61357
-IPC_HOST = '127.0.0.1'
-IPC_LOCK_NAME = f"{app_vars.app_name.replace(' ', '_')}_InstanceLock"
+APP_GUARD_HANDLE_NAME = f"{app_vars.app_name.replace(' ', '_')}_AppGuardInstance"
+IPC_MSG_OPEN_FILE = f"{APP_GUARD_HANDLE_NAME}_OpenFile"
 
 # Load user32.dll and functions
 user32 = ctypes.WinDLL('user32', use_last_error=True)
@@ -73,84 +74,6 @@ def get_keyboard_language():
     else:
         return f"Language ID: {language_id} (0x{language_id:X})"  # Fallback: Show ID
 
-
-class IPCServer(threading.Thread):
-    def __init__(self, frame_instance_ref_getter):
-        super().__init__(daemon=True) # Daemon thread will exit when main program exits
-        self.get_frame = frame_instance_ref_getter
-        self.server_socket = None
-        self.running = False
-        self._stop_event = threading.Event()
-
-    def run(self):
-        try:
-            self.server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-            self.server_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-            self.server_socket.bind((IPC_HOST, IPC_PORT))
-            self.server_socket.listen(1)
-            self.running = True
-
-            while not self._stop_event.is_set():
-                try:
-                    self.server_socket.settimeout(1.0)
-                    conn, addr = self.server_socket.accept()
-                    conn.settimeout(5.0)
-                    with conn:
-                        data_bytes = bytearray()
-                        while True:
-                            try:
-                                chunk = conn.recv(4096)
-                                if not chunk:
-                                    break
-                                data_bytes.extend(chunk)
-                                if b"}" in data_bytes: # Crude check for end of JSON
-                                    break
-                            except socket.timeout:
-                                break # Timeout receiving from this client
-                            except socket.error as e:
-                                break
-
-                        if data_bytes:
-                            try:
-                                message_str = data_bytes.decode('utf-8')
-                                message_obj = json.loads(message_str)
-                                frame = self.get_frame()
-                                if frame:
-                                    wx.CallAfter(frame.process_ipc_command, message_obj)
-                            except json.JSONDecodeError:
-                                print(f"IPC: Received invalid JSON.")
-                            except UnicodeDecodeError:
-                                print("IPC: Received non-UTF-8 data")
-                            except Exception as e:
-                                print(f"IPC: Error processing message: {e}")
-                except socket.timeout:
-                    continue
-                except Exception as e:
-                    if not self._stop_event.is_set():
-                        print(f"IPC Server: Error accepting connection: {e}")
-                    break
-        except Exception as e:
-            wx.CallAfter(wx.MessageBox,
-                          f"Could not start IPC server on port {IPC_PORT}: {e}\n"
-                          "Single instance file opening will not work.",
-                          "IPC Server Critical Error", wx.OK | wx.ICON_ERROR)
-        finally:
-            if self.server_socket:
-                self.server_socket.close()
-            self.running = False
-
-    def shutdown(self):
-        self._stop_event.set()
-        # To ensure accept() unblocks if it's waiting, we can try a dummy connection
-        # This is a common trick to make a blocking accept() return.
-        if self.running and self.server_socket:
-            try:
-                with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
-                    s.settimeout(0.1)
-                    s.connect_ex((IPC_HOST, IPC_PORT))
-            except Exception:
-                pass
-        
 
 class AccessHub(wx.Frame):
     def __init__(self, parent, title, launched_for_file=False):
@@ -240,26 +163,6 @@ class AccessHub(wx.Frame):
         if check_updates:
             self.check_for_updates()
 
-
-    def process_ipc_command(self, command_obj: dict):
-        """Processes a command received from another instance via IPC."""
-        action = command_obj.get("action")
-        if not self.IsShown():
-            self.Show(True)
-        if self.IsIconized():
-            self.Iconize(False) # De-minimize
-        self.Raise()
-
-        if action == "show_window":
-            # The Show/Iconize(False)/Raise above handles this.
-            pass
-        elif action == "open_file":
-            filepath = command_obj.get("filepath")
-            if filepath and os.path.exists(filepath) and os.path.isfile(filepath):
-                self.open_file_in_viewer(filepath)
-            elif filepath:
-                wx.MessageBox(f"Received request to open an invalid or non-existent file via IPC: {filepath}",
-                              "File Error", wx.OK | wx.ICON_ERROR, parent=self)
 
     def on_run_tool(self, event):
         """Handles running the tool selected in the list control."""
@@ -676,6 +579,19 @@ class AccessHub(wx.Frame):
             wx.MessageBox(f"Unsupported file type: {ext}\nAccessHub will now exit.", "Cannot Open File", wx.OK | wx.ICON_WARNING, None)
             wx.CallAfter(self.perform_app_exit)
 
+    def handle_ipc_open_file(self, ipc_msg_data: str):
+        """Handles IPC message to open a file, received by the primary instance."""
+        filepath = ipc_msg_data
+        if filepath and os.path.exists(filepath) and os.path.isfile(filepath):
+            if not self.IsShown():
+                self.Show(True)
+            self.Raise()
+            self.open_file_in_viewer(filepath)
+        else:
+            wx.CallAfter(wx.MessageBox,
+                          f"Received request to open an invalid or non-existent file: {filepath}",
+                          "File Error", wx.OK | wx.ICON_ERROR, parent=self)
+
     def on_text_utilities(self, event):
         text_utils_app = TextUtilitiesApp(None, title="Text Utilities")
         self.add_child_frame(text_utils_app)
@@ -880,13 +796,7 @@ class AccessHub(wx.Frame):
         if self.tbIcon:
             self.tbIcon.RemoveIcon()
             self.tbIcon.Destroy()
-
-        app_instance = wx.GetApp()
-        if hasattr(app_instance, 'ipc_server') and app_instance.ipc_server:
-            if app_instance.ipc_server.is_alive():
-                app_instance.ipc_server.shutdown()
-                app_instance.ipc_server.join(timeout=1.0)
-            app_instance.ipc_server = None
+        AppGuard.release()
         wx.Exit()
 
     def OnClose(self, event):
@@ -1061,84 +971,83 @@ class NetworkPlayerFrame(wx.Frame):
 
 
 if __name__ == "__main__":
-    checker = wx.SingleInstanceChecker(IPC_LOCK_NAME)
-    if checker.IsAnotherRunning():
-        # The secondary instance will send a message to the primary instance
-        # to either show itself or open a file.
-        filepath_to_open_arg = None
-        if len(sys.argv) > 1:
-            path_arg = sys.argv[1]
-            if os.path.exists(path_arg) and os.path.isfile(path_arg):
-                filepath_to_open_arg = os.path.abspath(path_arg)
+    app = wx.App(False) 
+    app.SetAppName(app_vars.app_name)
+    app.SetVendorName(app_vars.developer)
+    filepath_to_open = None
+    launched_for_file_arg = False
+    if len(sys.argv) > 1:
+        file_path_arg = sys.argv[1]
+        if os.path.exists(file_path_arg) and os.path.isfile(file_path_arg):
+            filepath_to_open = os.path.abspath(file_path_arg)
+            launched_for_file_arg = True
 
-        message_payload = {}
-        if filepath_to_open_arg:
-            message_payload["action"] = "open_file"
-            message_payload["filepath"] = filepath_to_open_arg
-        else:
-            message_payload["action"] = "show_window"
+    def on_appguard_secondary_quit_callback():
+        # This callback is required by AppGuard.init.
+        # It's called for secondary instances if quit_immediate=True.
+        # Since we use quit_immediate=False and handle exit manually, it's mostly a placeholder.
+        pass
 
-        message_sent_successfully = False
+    try:
+        AppGuard.init(app_handle=APP_GUARD_HANDLE_NAME,
+                      on_quit_callback=on_appguard_secondary_quit_callback,
+                      quit_immediate=False) # We manage secondary instance manually
+    except AppGuardError as e:
+        wx.MessageBox(f"Failed to initialize application instance management: {e}\nApplication will now exit.",
+                      "Initialization Error", wx.OK | wx.ICON_ERROR)
+        sys.exit(1)
+    except Exception as e:
+        wx.MessageBox(f"An unexpected error occurred during application initialization: {e}\nApplication will now exit.",
+                      "Critical Initialization Error", wx.OK | wx.ICON_ERROR)
+        sys.exit(1)
+
+    if not AppGuard.is_primary_instance():
+        # This is a secondary Instance ---
         try:
-            with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as ipc_client:
-                ipc_client.settimeout(2.0) # Timeout for connection and send
-                ipc_client.connect((IPC_HOST, IPC_PORT))
-                json_message = json.dumps(message_payload)
-                ipc_client.sendall(json_message.encode('utf-8'))
-                message_sent_successfully = True
-        except socket.timeout:
-            # Need a wx.App to show MessageBox if other instance is not responding
-            temp_app_for_msgbox = wx.App(False)
-            wx.MessageBox(f"Could not connect to the primary {app_vars.app_name} instance (timeout).\n"
-                          "Please ensure it is running and responsive.",
-                          "IPC Connection Failed", wx.OK | wx.ICON_WARNING)
-            del temp_app_for_msgbox # Clean up temporary app
-        except socket.error as e:
-            temp_app_for_msgbox = wx.App(False)
-            wx.MessageBox(f"Could not connect to the primary {app_vars.app_name} instance: {e}\n"
-                          "Please ensure it is running and responsive.",
-                          "IPC Connection Failed", wx.OK | wx.ICON_ERROR)
-            del temp_app_for_msgbox
+            app_guard.AG_focus_window(app_vars.app_name)
         except Exception as e:
-            temp_app_for_msgbox = wx.App(False)
-            wx.MessageBox(f"An unexpected error occurred while trying to communicate with the primary instance: {e}",
-                          "IPC Error", wx.OK | wx.ICON_ERROR)
-            del temp_app_for_msgbox
-        sys.exit(0) # Secondary instance always exits
-    else:
-        app = wx.App(False)
-        app.SetAppName(app_vars.app_name)
-        app.SetVendorName(app_vars.developer)
-        
-        frame_ref_container = {'frame': None}
-        def get_frame_instance():
-            return frame_ref_container['frame']
+            # This is not critical, but good to know if it fails.
+            print(f"Note: Could not focus primary instance's window: {e}")
 
-        app.ipc_server = IPCServer(get_frame_instance)
-        app.ipc_server.start()
-
-        filepath_to_open_arg = None
-        launched_for_file_arg_flag = False
-        if len(sys.argv) > 1:
-            path_arg = sys.argv[1]
-            if os.path.exists(path_arg) and os.path.isfile(path_arg):
-                filepath_to_open_arg = os.path.abspath(path_arg)
-                launched_for_file_arg_flag = True
+        if filepath_to_open:
+            try:
+                # Send the file path to the primary instance.
+                AppGuard.send_msg_request(IPC_MSG_OPEN_FILE, filepath_to_open)
+            except Exception as e:
+                wx.MessageBox(f"Could not send file '{os.path.basename(filepath_to_open)}' to the running AccessHub instance: {e}",
+                              "Error", wx.OK | wx.ICON_WARNING)
         
-        frame = AccessHub(None, title=app_vars.app_name, launched_for_file=launched_for_file_arg_flag)
-        frame_ref_container['frame'] = frame
-        if filepath_to_open_arg:
-            wx.CallAfter(frame.open_file_in_viewer, filepath_to_open_arg)
-            if launched_for_file_arg_flag:
-                frame.Show(False)
-            else:
-                frame.Show(True)
+        AppGuard.release() # Release AppGuard resources for this secondary instance.
+        sys.exit(0)
+
+    # --- This is the Primary Instance ---
+    # Create an AppGuard object instance for calling its instance methods
+    ag_instance = AppGuard()
+    frame = AccessHub(None, title=app_vars.app_name, launched_for_file=launched_for_file_arg)
+
+    # Register IPC message handler for opening files.
+    # This allows the primary instance to receive messages from secondary instances.
+    try:
+        # The callback 'frame.handle_ipc_open_file' will be called when a message
+        # with IPC_MSG_OPEN_FILE is received. The string data sent will be passed to it.
+        open_file_ipc_msg_struct: IPCMsg = ag_instance.create_ipc_msg(
+            msg_handle=IPC_MSG_OPEN_FILE,
+            callback=frame.handle_ipc_open_file
+        )
+        ag_instance.register_msg(open_file_ipc_msg_struct)
+    except Exception as e:
+        wx.MessageBox(f"Failed to register IPC message handler for opening files: {e}\n"
+                      "Opening files from new instances may not work.",
+                      "Registration Error", wx.OK | wx.ICON_WARNING, parent=frame)
+
+    if filepath_to_open:
+        wx.CallAfter(frame.open_file_in_viewer, filepath_to_open)
+        if launched_for_file_arg:
+            frame.Show(False)
         else:
             frame.Show(True)
+    else:
+        frame.Show(True)
 
-        frame.Bind(wx.EVT_CLOSE, frame.OnClose)
-        app.MainLoop()
-        if app.ipc_server and app.ipc_server.is_alive():
-            app.ipc_server.shutdown()
-            app.ipc_server.join(timeout=2.0)
-        del checker
+    frame.Bind(wx.EVT_CLOSE, frame.OnClose)
+    app.MainLoop()

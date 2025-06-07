@@ -1,4 +1,5 @@
 wxpython
+app_guard
 python-vlc
 accessible-output3
 passwordmeter
