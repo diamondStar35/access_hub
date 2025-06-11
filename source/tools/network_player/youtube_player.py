@@ -119,6 +119,7 @@ class YoutubePlayer(wx.Frame):
         self.SetSizer(sizer)
         self.Fit()
         self.Bind(wx.EVT_CHAR_HOOK, self.onKey)
+        self.Bind(wx.EVT_CLOSE, self.onClose)
 
         # Initialize VLC in a separate thread
         threading.Thread(target=self.init_vlc_thread).start()
@@ -758,7 +759,7 @@ class YoutubePlayer(wx.Frame):
         download_dlg.download_task()
 
 
-    def OnClose(self, event):
+    def onClose(self, event):
         if self.player:
             self.player.stop()
             self.player.release()
@@ -767,6 +768,14 @@ class YoutubePlayer(wx.Frame):
         if self.loading_dialog: #Close the dialog if it still exists.
             self.loading_dialog.Destroy()
             self.loading_dialog=None
+
+        frame_to_show_after_player = self.search_results_frame
         self.Destroy()
-        if self.search_results_frame:
-            self.search_results_frame.Show()
+        if frame_to_show_after_player:
+            try:
+                # Check if the frame to show still exists, as it might have been closed
+                if isinstance(frame_to_show_after_player, wx.Window) and frame_to_show_after_player.IsBeingDeleted() == False:
+                    frame_to_show_after_player.Show()
+                    frame_to_show_after_player.Raise()
+            except (wx.wxAssertionError, RuntimeError):
+                pass

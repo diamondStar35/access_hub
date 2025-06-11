@@ -117,9 +117,10 @@ class FavoritesManager:
 
 
 class FavoritesFrame(wx.Frame):
-    def __init__(self, parent):
+    def __init__(self, parent, calling_frame_to_show_on_my_close=None):
         super().__init__(parent, title="Favorite videos", size=(800, 600), style=wx.DEFAULT_FRAME_STYLE | wx.RESIZE_BORDER)
-        self.parent = parent
+        self.calling_frame_to_show_on_my_close = calling_frame_to_show_on_my_close
+        self.parent_for_sub_frames = parent
         self.favorites_manager = FavoritesManager()
         self.current_favorites = self.favorites_manager.get_favorites_list()
         self.context_menu = None
@@ -204,23 +205,14 @@ class FavoritesFrame(wx.Frame):
             wx.MessageBox(f"Could not find the link for '{title}'.", "Error", wx.OK | wx.ICON_ERROR)
             return
 
+        self.Hide()
         if item_type == 'video':
-            if play_as_audio:
-                format_selector = 'ba/b'
-            else:
-                quality = self.default_video_quality.lower()
-                if quality == "low":
-                    format_selector = 'worst[ext=mp4]/worstvideo[ext=mp4]/worst'
-                elif quality == "medium":
-                    format_selector = 'best[height<=?720][ext=mp4]/bestvideo[height<=?720][ext=mp4]/best[height<=?720]'
-                elif quality == "best":
-                    format_selector = 'best[ext=mp4]/bestvideo[ext=mp4]/best'
-                else:
-                    format_selector = 'best[height<=?720][ext=mp4]/bestvideo[height<=?720][ext=mp4]/best[height<=?720]'
+            # Determine format_selector based on play_as_audio and settings
+            format_selector = 'ba/b' if play_as_audio else self.get_video_format_selector()
             threading.Thread(target=self._fetch_and_play_video, args=(item_url, title, format_selector, play_as_audio)).start()
-
         elif item_type == 'playlist':
             if play_as_audio:
+                self.Show()
                 wx.MessageBox("Cannot play a playlist as audio directly from favorites. Please open it first.", "Info", wx.OK | wx.ICON_INFORMATION)
                 return
             self.show_loading_dialog(f"Getting playlist info for: {title}", "Loading Playlist...")
@@ -228,12 +220,22 @@ class FavoritesFrame(wx.Frame):
 
         elif item_type == 'channel':
             if play_as_audio:
+                self.Show()
                 wx.MessageBox("Cannot open a channel as audio directly from favorites. Please open it first.", "Info", wx.OK | wx.ICON_INFORMATION)
                 return
             self.show_loading_dialog(f"Getting channel info for: {title}", "Loading Channel...")
             threading.Thread(target=self.fetch_channel_data_thread, args=(item_url, title)).start()
         else:
+            self.Show()
             wx.MessageBox(f"Unknown item type: {item_type}", "Error", wx.OK | wx.ICON_ERROR)
+        if event: event.Skip()
+
+    def get_video_format_selector(self):
+        quality = self.default_video_quality.lower()
+        if quality == "low": return 'worst[ext=mp4]/worstvideo[ext=mp4]/worst'
+        elif quality == "medium": return 'best[height<=?720][ext=mp4]/bestvideo[height<=?720][ext=mp4]/best[height<=?720]'
+        elif quality == "best": return 'best[ext=mp4]/bestvideo[ext=mp4]/best'
+        return 'best[height<=?720][ext=mp4]/bestvideo[height<=?720][ext=mp4]/best[height<=?720]' # Default
 
     def _fetch_and_play_video(self, youtube_url, title, format_selector, play_as_audio=False):
         """Worker thread to fetch stream info and create the player."""
@@ -289,7 +291,10 @@ class FavoritesFrame(wx.Frame):
             self.Show() 
         elif items:
             from .youtube_search import YoutubeSearchResults
-            playlist_viewer_frame = YoutubeSearchResults(self.parent, items, is_playlist_view=True, original_search_frame=self)
+            playlist_viewer_frame = YoutubeSearchResults(self.parent_for_sub_frames, items, is_playlist_view=True, calling_frame_to_show_on_my_close=self)
+            top_level_parent = wx.GetApp().GetTopWindow()
+            if hasattr(top_level_parent, 'add_child_frame'):
+                 top_level_parent.add_child_frame(playlist_viewer_frame)
             playlist_viewer_frame.Show()
         else:
             wx.MessageBox(f"No items found in the playlist '{playlist_title}' or an error occurred.", "Playlist Empty", wx.OK | wx.ICON_INFORMATION)
@@ -319,7 +324,10 @@ class FavoritesFrame(wx.Frame):
             self.Show()
         elif channel_data:
             from .channel_viewer import ChannelViewerFrame
-            channel_viewer_frame = ChannelViewerFrame(self, channel_data)
+            channel_viewer_frame = ChannelViewerFrame(self.parent_for_sub_frames, channel_data, calling_frame_to_show_on_my_close=self)
+            top_level_parent = wx.GetApp().GetTopWindow()
+            if hasattr(top_level_parent, 'add_child_frame'):
+                 top_level_parent.add_child_frame(channel_viewer_frame)
             channel_viewer_frame.Show()
         else:
             wx.MessageBox(f"No data found for the channel '{channel_title}' or an error occurred.", "Channel Error", wx.OK | wx.ICON_INFORMATION)
@@ -327,15 +335,15 @@ class FavoritesFrame(wx.Frame):
 
     def _create_and_show_player(self, title, media_url, description, original_youtube_link):
         """Creates and shows the YoutubePlayer (must be on the main thread)."""
+        # YoutubePlayer's 4th arg ('search_results_frame') is the frame to show when player closes.
+        # Here, it's self (FavoritesFrame).
         self.player = YoutubePlayer(None, title, media_url, self, description, original_youtube_link, None, -1)
         self.player.Bind(EVT_VLC_READY, self.show_when_ready)
-        self.player.Bind(wx.EVT_CLOSE, self.player.OnClose)
 
     def show_when_ready(self, event):
         """Called when the YoutubePlayer is ready to show."""
         self.destroy_loading_dialog()
         if self.player:
-            self.Hide()
             self.player.Show()
         event.Skip()
 
@@ -593,10 +601,14 @@ class FavoritesFrame(wx.Frame):
 
     def onClose(self, event):
         if hasattr(self, 'player') and self.player:
-            self.player.Close()
-        if hasattr(self, 'loading_dialog') and self.loading_dialog:
-             try:
-                 self.loading_dialog.Destroy()
-             except Exception:
-                 pass
+            try: self.player.Close(force=True)
+            except: pass
+        self.destroy_loading_dialog()
+
+        if self.calling_frame_to_show_on_my_close:
+            try:
+                self.calling_frame_to_show_on_my_close.Show()
+                self.calling_frame_to_show_on_my_close.Raise()
+            except (wx.wxAssertionError, RuntimeError):
+                pass # Frame might be destroyed or already shown
         self.Destroy()

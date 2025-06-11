@@ -10,8 +10,7 @@ import os
 
 
 class ChannelViewerFrame(wx.Frame):
-    def __init__(self, parent_search_results_frame, channel_data_dict):
-        self.parent_search_results_frame = parent_search_results_frame
+    def __init__(self, parent, channel_data_dict, calling_frame_to_show_on_my_close=None):
         self.channel_data_dict = channel_data_dict
         self.channel_info = {} 
         self.channel_items_list = []
@@ -20,7 +19,8 @@ class ChannelViewerFrame(wx.Frame):
 
         _title = self.channel_data_dict.get('title', self.channel_data_dict.get('channel', 'Channel Viewer'))
         super().__init__(parent_search_results_frame, title=_title, size=(800, 650), style=wx.DEFAULT_FRAME_STYLE | wx.RESIZE_BORDER)
-
+        self.calling_frame_to_show_on_my_close = calling_frame_to_show_on_my_close
+        self.parent_for_sub_frames = parent
         self._extract_channel_details()
         self.load_settings()
 
@@ -186,16 +186,20 @@ class ChannelViewerFrame(wx.Frame):
             if event: event.Skip()
             return
 
-        playlist_info_dict = self.parent_search_results_frame.is_item_playlist(selected_original_item)
-        is_playlist = playlist_info_dict['is_playlist']
-        item_info_for_parent = self._prepare_item_info_for_parent_handler(selected_original_item)
-        if not item_info_for_parent:
+        item_info_for_parent_ysr = self._prepare_item_info_for_parent_handler(selected_original_item)
+        if not item_info_for_parent_ysr:
             if event: event.Skip()
             return
-
+        
+        is_playlist = item_info_for_parent_ysr.get('is_playlist', False)
         if is_playlist:
-            self.parent_search_results_frame.onPlayOrOpenPlaylist(event=None, item_info=item_info_for_parent)
+            if self.calling_frame_to_show_on_my_close and \
+               isinstance(self.calling_frame_to_show_on_my_close, YoutubeSearchResults):
+                self.calling_frame_to_show_on_my_close.onPlayOrOpenPlaylist(event=None, item_info=item_info_for_parent_ysr, calling_frame_to_hide_override=self)
+            else:
+                wx.MessageBox("Error: Could not delegate playlist opening. Invalid parent context.", "Context Error", wx.OK | wx.ICON_ERROR)
         else:
+            self.Hide()
             self.play_channel_video(selected_original_item, play_as_audio=False)
         if event: event.Skip()
 
@@ -358,14 +362,17 @@ class ChannelViewerFrame(wx.Frame):
             except RuntimeError: pass
         self.loading_dialog = None
 
+
     def on_viewer_close(self, event):
         if self.player:
             try: self.player.Close(force=True)
             except Exception: pass
-        if self.parent_search_results_frame:
+        self.destroy_loading_dialog()
+
+        if self.calling_frame_to_show_on_my_close:
             try:
-                self.parent_search_results_frame.Show()
-                self.parent_search_results_frame.Raise()
-            except (wx.wxAssertionError, RuntimeError): pass
+                self.calling_frame_to_show_on_my_close.Show()
+                self.calling_frame_to_show_on_my_close.Raise()
+            except (wx.wxAssertionError, RuntimeError):
+                pass
         self.Destroy()
-        if event: event.Skip()

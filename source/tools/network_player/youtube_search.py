@@ -23,7 +23,7 @@ ChannelDataFetchEvent, EVT_CHANNEL_DATA_FETCH = NewEvent()
 class YoutubeSearchDialog(wx.Dialog):
     def __init__(self, parent, network_player_frame):
         super().__init__(parent, title="YouTube Search", style=wx.DEFAULT_DIALOG_STYLE | wx.RESIZE_BORDER)
-        self.parent_window = network_player_frame
+        self.frame_to_manage = network_player_frame
         self.history_path = get_file_path("search_history.json")
         self._history = self.load_history()
 
@@ -119,10 +119,36 @@ class YoutubeSearchDialog(wx.Dialog):
 
     def onSearchResults(self, event):
         results = event.results        
-        self.loading_dialog.Destroy()
-        self.loading_dialog = None
+        if hasattr(self, 'loading_dialog') and self.loading_dialog:
+            try:
+                self.loading_dialog.Destroy()
+            except RuntimeError: pass # It might have been destroyed
+            self.loading_dialog = None
+
         if results:
-            youtube_results_frame = YoutubeSearchResults(self.parent_window, results) 
+            if self.frame_to_manage:
+                try:
+                    self.frame_to_manage.Hide()
+                except (wx.wxAssertionError, RuntimeError): pass
+
+            if self.frame_to_manage:
+                if hasattr(self.frame_to_manage, 'access_hub_instance'):
+                    wx_parent_for_results = self.frame_to_manage.access_hub_instance
+                else: # Fallback to NPF's direct parent
+                    wx_parent_for_results = self.frame_to_manage.GetParent()
+            if not wx_parent_for_results:
+                 wx_parent_for_results = wx.GetApp().GetTopWindow()
+
+            youtube_results_frame = YoutubeSearchResults(wx_parent_for_results, results, is_playlist_view=False, calling_frame_to_show_on_my_close=self.frame_to_manage)
+            # Add to AccessHub's child tracking if AccessHub is the parent or known
+            access_hub_ref = None
+            if isinstance(wx_parent_for_results, wx.Frame) and hasattr(wx_parent_for_results, 'add_child_frame'):
+                access_hub_ref = wx_parent_for_results
+            elif self.frame_to_manage and hasattr(self.frame_to_manage, 'access_hub_instance'):
+                access_hub_ref = self.frame_to_manage.access_hub_instance
+
+            if access_hub_ref and hasattr(access_hub_ref, 'add_child_frame'):
+                access_hub_ref.add_child_frame(youtube_results_frame)
             youtube_results_frame.Show()
         else:
             wx.MessageBox("No results found or error fetching results.", "YouTube Search", wx.OK | wx.ICON_INFORMATION)        
@@ -130,14 +156,14 @@ class YoutubeSearchDialog(wx.Dialog):
 
 
 class YoutubeSearchResults(wx.Frame):
-    def __init__(self, parent, results_list, is_playlist_view=False, original_search_frame=None, playlist_uploader=None):
+    def __init__(self, parent, results_list, is_playlist_view=False, calling_frame_to_show_on_my_close=None, playlist_uploader=None):
         self.is_playlist_view = is_playlist_view
-        self.original_search_frame = original_search_frame 
         self.playlist_uploader = playlist_uploader
         title = "Playlist Viewer" if is_playlist_view else "Search Results"
         super().__init__(parent, title=title, size=(800, 650), style=wx.DEFAULT_DIALOG_STYLE| wx.RESIZE_BORDER)
+        self.calling_frame_to_show_on_my_close = calling_frame_to_show_on_my_close
         self.player=None
-        self.parent=parent
+        self.parent_for_sub_frames = parent
         self.favorites_manager = FavoritesManager()
         self.context_menu=None
         project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -155,7 +181,7 @@ class YoutubeSearchResults(wx.Frame):
         vbox.Add(self.results_listbox, 1, wx.ALL | wx.EXPAND, 5)
 
         play_button = wx.Button(panel, label="Play")
-        play_button.Bind(wx.EVT_BUTTON, lambda event: self.onPlayOrOpenPlaylist(event, item_info=self.get_selected_item_info_from_listbox()))
+        play_button.Bind(wx.EVT_BUTTON, lambda event: self.onPlayOrOpenPlaylist(event, item_info=self.get_selected_item_info_from_listbox(), calling_frame_to_hide_override=self))
         vbox.Add(play_button, 0, wx.ALL | wx.ALIGN_RIGHT, 5)
 
         download_button = wx.Button(panel, label="Download")
@@ -273,7 +299,7 @@ class YoutubeSearchResults(wx.Frame):
         except (ValueError, TypeError):
             return str(total_seconds_num)
 
-    def onPlayOrOpenPlaylist(self, event, item_info=None):
+    def onPlayOrOpenPlaylist(self, event, item_info=None, calling_frame_to_hide_override=None):
         """Handles playing a video, opening a playlist, or opening a channel."""
         if not item_info:
             item_info = self.get_selected_item_info_from_listbox()
@@ -281,28 +307,45 @@ class YoutubeSearchResults(wx.Frame):
             if event: event.Skip()
             return
 
+        # frame_to_hide is the frame that should be hidden when launching the new view.
+        # This is typically 'self' (the current YSR instance) unless overridden
+        frame_to_hide = calling_frame_to_hide_override if calling_frame_to_hide_override else self        
+        action_taken = False
         if item_info.get('is_channel'):
             channel_url = item_info.get('webpage_url')
             channel_title = item_info.get('title', 'Untitled Channel')
             if channel_url:
+                try: frame_to_hide.Hide()
+                except (wx.wxAssertionError, RuntimeError): pass
                 self.show_loading_dialog(f"Getting channel info for: {channel_title}", "Loading Channel...")
-                threading.Thread(target=self.fetch_channel_data_thread, args=(channel_url,)).start()
+                threading.Thread(target=self.fetch_channel_data_thread, args=(channel_url, frame_to_hide)).start()
+                action_taken = True
             else:
                 wx.MessageBox("Channel link is missing or not found.", "Error", wx.OK | wx.ICON_ERROR)
         elif item_info.get('is_playlist'):
             playlist_url = item_info.get('webpage_url')
             playlist_title = item_info.get('title', 'Untitled Playlist')
-            playlist_uploader = item_info.get('uploader')
+            current_playlist_uploader = item_info.get('uploader')
             if playlist_url:
+                try: frame_to_hide.Hide()
+                except (wx.wxAssertionError, RuntimeError): pass
                 self.show_loading_dialog(f"Getting playlist info for: {playlist_title}", "Loading Playlist...")
-                threading.Thread(target=self.fetch_playlist_items_thread, args=(playlist_url, playlist_uploader)).start()
+                threading.Thread(target=self.fetch_playlist_items_thread, args=(playlist_url, current_playlist_uploader, frame_to_hide)).start()
+                action_taken = True
             else:
                 wx.MessageBox("Playlist link is missing or not found.", "Error", wx.OK | wx.ICON_ERROR)
         else:
-            self.onPlay(event, item_info=item_info, play_as_audio=False)
+            self.onPlay(event, item_info=item_info, play_as_audio=False, frame_that_should_be_hidden_and_reactivated=frame_to_hide)
+            action_taken = True
+
+        if not action_taken and frame_to_hide != self: # If error and called by other, show caller back
+            try: frame_to_hide.Show()
+            except (wx.wxAssertionError, RuntimeError): pass
+        elif not action_taken and frame_to_hide == self:
+            self.Show()
         if event: event.Skip()
     
-    def fetch_playlist_items_thread(self, playlist_url, playlist_uploader=None):
+    def fetch_playlist_items_thread(self, playlist_url, playlist_uploader=None, frame_to_activate=None):
         """Worker thread to fetch playlist items using yt-dlp."""
         playlist_items = []
         error_message = None
@@ -315,8 +358,7 @@ class YoutubeSearchResults(wx.Frame):
             
         except Exception as e:
             error_message = f"Error fetching playlist items: {e}"
-
-        wx.PostEvent(self, PlaylistItemsFetchEvent(items=playlist_items, error=error_message, playlist_uploader=playlist_uploader))
+        wx.PostEvent(self, PlaylistItemsFetchEvent(items=playlist_items, error=error_message, playlist_uploader=playlist_uploader, originating_frame_to_reactivate=frame_to_reactivate))
 
     def onPlaylistItemsFetched(self, event):
         """Handles the completion of playlist item fetching."""
@@ -324,18 +366,29 @@ class YoutubeSearchResults(wx.Frame):
         items = event.items
         error = event.error
         playlist_uploader = event.playlist_uploader
+        originating_frame_to_reactivate = event.originating_frame_to_reactivate
 
         if error:
             wx.MessageBox(error, "Playlist Error", wx.OK | wx.ICON_ERROR)
+            if originating_frame_to_reactivate:
+                try: originating_frame_to_reactivate.Show()
+                except (wx.wxAssertionError, RuntimeError): pass
         elif items:
-            playlist_viewer_frame = YoutubeSearchResults(self.parent, items, is_playlist_view=True, original_search_frame=self, playlist_uploader=playlist_uploader)
+            # originating_frame_to_reactivate remains hidden.
+            # New YSR (playlist view) will show originating_frame_to_reactivate on its close.
+            wx_parent_playlist_view = originating_frame_to_reactivate.GetParent() if originating_frame_to_reactivate else self.parent_for_sub_frames
+            playlist_viewer_frame = YoutubeSearchResults(wx_parent_playlist_view, items, is_playlist_view=True,calling_frame_to_show_on_my_close=originating_frame_to_reactivate, playlist_uploader=playlist_uploader)
+            top_level_parent = wx.GetApp().GetTopWindow()
+            if hasattr(top_level_parent, 'add_child_frame'):
+                top_level_parent.add_child_frame(playlist_viewer_frame)
             playlist_viewer_frame.Show()
-            if self.IsShown(): # Only hide if currently shown, avoids issues if already hidden.
-                 self.Hide()
         else:
             wx.MessageBox("No items found in the playlist or an error occurred.", "Playlist Empty", wx.OK | wx.ICON_INFORMATION)
+            if originating_frame_to_reactivate:
+                try: originating_frame_to_reactivate.Show()
+                except (wx.wxAssertionError, RuntimeError): pass
 
-    def fetch_channel_data_thread(self, channel_url):
+    def fetch_channel_data_thread(self, channel_url, frame_to_activate):
         """Worker thread to fetch channel data."""
         channel_data = None
         error_message = None
@@ -347,23 +400,32 @@ class YoutubeSearchResults(wx.Frame):
                 error_message = "Failed to fetch channel data: No information returned."
         except Exception as e:
             error_message = f"Error getting channel data: {e}"
-
-        wx.PostEvent(self, ChannelDataFetchEvent(data=channel_data, error=error_message))
+        wx.PostEvent(self, ChannelDataFetchEvent(data=channel_data, error=error_message, originating_frame_to_reactivate=frame_to_reactivate))
 
     def onChannelDataFetched(self, event):
         """Handles the completion of channel data fetching."""
         self.destroy_loading_dialog()
         channel_data = event.data
         error = event.error
+        originating_frame_to_reactivate = event.originating_frame_to_reactivate
 
         if error:
             wx.MessageBox(error, "Channel Error", wx.OK | wx.ICON_ERROR)
+            if originating_frame_to_reactivate:
+                try: originating_frame_to_reactivate.Show()
+                except (wx.wxAssertionError, RuntimeError): pass
         elif channel_data:
-            channel_viewer_frame = ChannelViewerFrame(self, channel_data)
+            wx_parent_cvf = originating_frame_to_reactivate.GetParent() if originating_frame_to_reactivate else self.parent_for_sub_frames
+            channel_viewer_frame = ChannelViewerFrame(wx_parent_cvf, channel_data, calling_frame_to_show_on_my_close=originating_frame_to_reactivate)
+            top_level_parent = wx.GetApp().GetTopWindow()
+            if hasattr(top_level_parent, 'add_child_frame'):
+                top_level_parent.add_child_frame(channel_viewer_frame)
             channel_viewer_frame.Show()
-            self.Hide()
         else:
-            wx.MessageBox("No data found for the channel or an error occurred.", "Channel Empty/Error", wx.OK | wx.ICON_INFORMATION)
+            wx.MessageBox("No data found for the channel or an error occurred.", "Channel Error", wx.OK | wx.ICON_INFORMATION)
+            if originating_frame_to_reactivate:
+                try: originating_frame_to_reactivate.Show()
+                except (wx.wxAssertionError, RuntimeError): pass
 
     def onPlayQuality(self, event, quality, item_info=None):
         if not item_info:
@@ -428,44 +490,52 @@ class YoutubeSearchResults(wx.Frame):
             wx.CallAfter(wx.MessageBox, f"Could not play: {e}", "Error", wx.OK | wx.ICON_ERROR)
             wx.CallAfter(self.Show) # Show the results window again on failure
 
-    def onPlay(self, event, play_as_audio=False, item_info=None):
-        if not item_info:
+    def onPlay(self, event, play_as_audio=False, item_info=None, frame_that_should_be_hidden_and_reactivated=None):
+        if not item_info: # If called directly, e.g. from context menu
             item_info = self.get_selected_item_info_from_listbox()
+            if not frame_that_should_be_hidden_and_reactivated: # If not specified, 'self' is the frame
+                frame_that_should_be_hidden_and_reactivated = self
+        
         if not item_info:
             wx.MessageBox("Please select an item to play.", "No Selection", wx.OK | wx.ICON_INFORMATION)
+            if frame_that_should_be_hidden_and_reactivated:
+                 try: frame_that_should_be_hidden_and_reactivated.Show()
+                 except (wx.wxAssertionError, RuntimeError): pass
             return
 
         if item_info.get('is_playlist') or item_info.get('is_channel'):
-            self.onPlayOrOpenPlaylist(event, item_info=item_info)
+            self.onPlayOrOpenPlaylist(event, item_info=item_info, calling_frame_to_hide_override=frame_that_should_be_hidden_and_reactivated)
             return
 
         video_url = item_info.get('webpage_url')
         video_title = item_info.get('title', 'Untitled')
         if not video_url:
             wx.MessageBox("The video link was not found for this item.", "Playback Error", wx.OK | wx.ICON_ERROR)
+            if frame_that_should_be_hidden_and_reactivated:
+                 try: frame_that_should_be_hidden_and_reactivated.Show()
+                 except (wx.wxAssertionError, RuntimeError): pass
             return
 
-        threading.Thread(target=self.get_direct_link_and_play, args=(video_url, video_title, play_as_audio, item_info)).start()
+        if frame_that_should_be_hidden_and_reactivated:
+            try:
+                frame_that_should_be_hidden_and_reactivated.Hide()
+            except (wx.wxAssertionError, RuntimeError): pass
+
+        format_selector = 'ba/b' if play_as_audio else self.get_video_format_selector_for_play()
+        threading.Thread(target=self.get_direct_link_and_play, args=(video_url, video_title, format_selector, item_info, frame_that_should_be_hidden_and_reactivated, play_as_audio)).start()
         if event: event.Skip()
 
-    def get_direct_link_and_play(self, url, title, play_as_audio, item_info_for_player_context):
+    def get_video_format_selector_for_play(self):
+        quality = self.default_quality
+        if quality == "Low": return 'worst[ext=mp4]/worstvideo[ext=mp4]/worst'
+        elif quality == "Medium": return 'best[height<=?720][ext=mp4]/bestvideo[height<=?720][ext=mp4]/best[height<=?720]'
+        elif quality == "Best": return 'best[ext=mp4]/bestvideo[ext=mp4]/best'
+        return 'best[height<=?720][ext=mp4]/bestvideo[height<=?720][ext=mp4]/best[height<=?720]'
+
+    def get_direct_link_and_play(self, url, title, format_selector, item_info_for_player_context, frame_to_reactivate_on_player_close, play_as_audio):
         try:
             dialog_title = "Playing audio..." if play_as_audio else "Playing video..."
             wx.CallAfter(self.show_loading_dialog, f"Playing: {title}", dialog_title)
-            wx.CallAfter(self.Hide)
-
-            format_selector = None
-            if play_as_audio:
-                format_selector = 'ba/b'
-            else:
-                if self.default_quality == "Low":
-                    format_selector = 'worst[ext=mp4]/worstvideo[ext=mp4]/worst'
-                elif self.default_quality == "Medium":
-                    format_selector = 'best[height<=?720][ext=mp4]/bestvideo[height<=?720][ext=mp4]/best[height<=?720]'
-                elif self.default_quality == "Best":
-                    format_selector = 'best[ext=mp4]/bestvideo[ext=mp4]/best'
-                else:
-                    format_selector = 'best[height<=?720][ext=mp4]/bestvideo[height<=?720][ext=mp4]/best[height<=?720]'
 
             info_dict = run_yt_dlp_json(url, format_selector=format_selector)
             if not info_dict:
@@ -487,18 +557,18 @@ class YoutubeSearchResults(wx.Frame):
             except ValueError:
                 # Fallback if not found, though it should be.
                 selected_idx = self.results_listbox.GetSelection()
-
-            wx.CallAfter(self.create_and_show_player, title, media_url, description, url, self.results, selected_idx)
+            wx.CallAfter(self.create_and_show_player, title, media_url, description, url, self.results, selected_idx, frame_to_reactivate_on_player_close)
 
         except Exception as e:
             wx.CallAfter(self.destroy_loading_dialog)
             wx.CallAfter(wx.MessageBox, f"Could not play video: {e}", "Error", wx.OK | wx.ICON_ERROR)
-            wx.CallAfter(self.Show)
+            if frame_to_reactivate_on_player_close:
+                try: frame_to_reactivate_on_player_close.Show()
+                except (wx.wxAssertionError, RuntimeError): pass
 
-    def create_and_show_player(self, title, url, description, original_youtube_link, results_for_player_nav, current_index_in_nav_list):
-        self.player = YoutubePlayer(None, title, url, self, description, original_youtube_link, results_for_player_nav, current_index_in_nav_list)
+    def create_and_show_player(self, title, url, description, original_youtube_link, results_for_player_nav, current_index_in_nav_list, frame_to_reactivate_on_player_close):
+        self.player = YoutubePlayer(None, title, url, frame_to_reactivate_on_player_close, description, original_youtube_link, results_for_player_nav, current_index_in_nav_list)
         self.player.Bind(EVT_VLC_READY, self.show_when_ready)
-        self.player.Bind(wx.EVT_CLOSE, self.player.OnClose)
 
     def show_when_ready(self, event):
         self.destroy_loading_dialog()
@@ -818,22 +888,15 @@ class YoutubeSearchResults(wx.Frame):
 
 
     def onClose(self, event):
-        parent_to_reactivate = None
-        if self.is_playlist_view and self.original_search_frame:
-            # This branch is for when a playlist viewer is closed.
-            # It should show the frame from which this playlist viewer was opened.
-            parent_to_reactivate = self.original_search_frame
-        elif self.parent and not self.is_playlist_view:
-            # This branch is for when a regular search results frame is closed.
-            parent_to_reactivate = self.parent
+        if hasattr(self, 'player') and self.player:
+            try: self.player.Close(force=True)
+            except: pass
+        self.destroy_loading_dialog()
 
-        if parent_to_reactivate:
+        if self.calling_frame_to_show_on_my_close:
             try:
-                parent_to_reactivate.Show()
-                parent_to_reactivate.Raise()
+                self.calling_frame_to_show_on_my_close.Show()
+                self.calling_frame_to_show_on_my_close.Raise()
             except (wx.wxAssertionError, RuntimeError):
                 pass
         self.Destroy()
-
-        if event:
-            event.Skip()

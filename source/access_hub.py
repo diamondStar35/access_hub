@@ -911,6 +911,8 @@ class PasswordDoctorDialog(wx.Dialog):
 class NetworkPlayerFrame(wx.Frame):
     def __init__(self, parent, title):
         super(NetworkPlayerFrame, self).__init__(parent, title=title, size=(400, 200))
+        # parent is AccessHub
+        self.access_hub_instance = parent 
         panel = wx.Panel(self)
         vbox = wx.BoxSizer(wx.VERTICAL)
 
@@ -954,9 +956,9 @@ class NetworkPlayerFrame(wx.Frame):
 
     def on_open_favorites(self, event):
         """Opens the Favorites window."""
-        favorites_frame = FavoritesFrame(self)
-        self.Parent.add_child_frame(favorites_frame)
-        self.Parent.manage_main_window_visibility(favorites_frame)
+        self.Hide()
+        favorites_frame = FavoritesFrame(self.access_hub_instance, calling_frame_to_show_on_my_close=self)
+        self.access_hub_instance.add_child_frame(favorites_frame)
         favorites_frame.Show()
 
     def play_video(self, link):
