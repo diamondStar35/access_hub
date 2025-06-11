@@ -7,6 +7,7 @@ from .comments import CommentsDialog
 from .download_dialogs import DownloadSettingsDialog, DownloadDialog
 from .subtitle_manager import SubtitleManager
 from .utils import run_yt_dlp_json
+from .go_to_time import GoToTimeDialog
 from speech import speak
 import vlc
 import sys
@@ -155,6 +156,9 @@ class YoutubePlayer(wx.Frame):
         self.save_selection_item = video_menu.Append(wx.ID_ANY, "Save Selection\tctrl+s")
         self.Bind(wx.EVT_MENU, self.save_selection, self.save_selection_item)
         self.save_selection_item.Enable(False) 
+
+        go_to_time_item = video_menu.Append(wx.ID_ANY, "Go to Time...\tctrl+g")
+        self.Bind(wx.EVT_MENU, self.on_go_to_time, go_to_time_item)
 
         description_item = video_menu.Append(wx.ID_ANY, "Video Description\talt+d")
         self.Bind(wx.EVT_MENU, lambda event: self.show_description(event), description_item)
@@ -658,6 +662,27 @@ class YoutubePlayer(wx.Frame):
                 self.save_selection_item.Enable(True)
             else:
                 self.save_selection_item.Enable(False)
+
+    def on_go_to_time(self, event):
+        if not self.player:
+            wx.MessageBox("Player is not initialized.", "Error", wx.OK | wx.ICON_ERROR, self)
+            return
+
+        total_duration_ms = self.player.get_length()
+        current_elapsed_ms = self.player.get_time()
+
+        if total_duration_ms <= 0:
+            wx.MessageBox("Video duration is not available or video not fully loaded.",
+                          "Cannot Go to Time", wx.OK | wx.ICON_INFORMATION, self)
+            return
+
+        dlg = GoToTimeDialog(self, total_duration_ms, current_elapsed_ms)
+        if dlg.ShowModal() == wx.ID_OK:
+            target_ms = dlg.get_selected_time_milliseconds()
+            if self.player:
+                self.player.set_time(target_ms)
+                speak(f"Jumped to {self._format_time(target_ms)}")
+        dlg.Destroy()
 
     def show_description(self, event):
         if hasattr(self, 'description') and self.description:
