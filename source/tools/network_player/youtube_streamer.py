@@ -96,13 +96,11 @@ class YoutubeStreamer(wx.Dialog):
                 if formats:
                     media_url = formats[0].get('url')
             if not media_url:
-                 print(f"Error: No playable URL found in yt-dlp output for URL: {url} with format: {format_selector}")
                  wx.CallAfter(wx.MessageBox, f"Could not find a playable stream URL for the selected format ({quality}).", "Extraction Error", wx.OK | wx.ICON_ERROR)
                  return None
 
             return media_url, title, description
         except Exception as e:
-            print(f"Error during extraction process: {e}")
             wx.CallAfter(wx.MessageBox, f"An unexpected error occurred during extraction: {e}", "Error", wx.OK | wx.ICON_ERROR)
             return None
 

@@ -202,7 +202,7 @@ class DownloadSettingsDialog(wx.Dialog):
 
 
 class DownloadDialog(wx.Dialog):
-    def __init__(self, parent, title, download_settings): # Modified __init__
+    def __init__(self, parent, title, download_settings):
         super().__init__(parent, title=title, size=(600, 300), style=wx.DEFAULT_DIALOG_STYLE | wx.RESIZE_BORDER)
         self.download_settings = download_settings
         self.parent_frame = parent

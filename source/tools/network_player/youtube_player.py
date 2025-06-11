@@ -120,7 +120,7 @@ class YoutubePlayer(wx.Frame):
         self.SetSizer(sizer)
         self.Fit()
         self.Bind(wx.EVT_CHAR_HOOK, self.onKey)
-        self.Bind(wx.EVT_CLOSE, self.onClose)
+        self.Bind(wx.EVT_CLOSE, self.OnClose)
 
         # Initialize VLC in a separate thread
         threading.Thread(target=self.init_vlc_thread).start()
@@ -784,7 +784,7 @@ class YoutubePlayer(wx.Frame):
         download_dlg.download_task()
 
 
-    def onClose(self, event):
+    def OnClose(self, event):
         if self.player:
             self.player.stop()
             self.player.release()

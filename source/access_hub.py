@@ -3,7 +3,7 @@ import wx.adv
 import wx.lib.newevent
 import app_guard
 from app_guard import AppGuard, AppGuardError, IPCMsg
-import os, sys, subprocess, re, platform, shutil, json
+import os, sys, subprocess, re, platform, shutil
 import app_vars
 from gui.settings import SettingsDialog, GeneralSettingsPanel, load_app_config, get_settings_path
 from gui.dialogs import AccessTaskBarIcon, ContactDialog, AboutDialog
@@ -11,11 +11,8 @@ from tools.text_utils.text_utils import TextUtilitiesApp
 from tools.text_utils.json_viewer import JsonViewer
 from tools.text_utils.xml_viewer import XMLViewer
 from tools.shutdown_control import ShutdownControl
-from tools.network_player.media_player import DirectLinkPlayer, EVT_VLC_READY
-from tools.network_player.youtube_search import YoutubeSearchDialog
-from tools.network_player.youtube_streamer import YoutubeStreamer
-from tools.network_player.settings import YoutubeSettings
-from tools.network_player.favorites_manager import FavoritesFrame
+from tools.network_player.network_player import NetworkPlayerFrame
+from tools.password_doctor import PasswordDoctorDialog
 from tools.task_scheduler.task_scheduler import TaskScheduler
 from tools.eleven_labs.eleven_labs import ElevenLabs, ElevenLabsSettings
 from tools.accessible_terminal.session_viewer import SessionViewer
@@ -24,8 +21,6 @@ from tools.online_tts.online_tts import OnlineTTS
 from tools.file_utils.file_tools import FileTools
 from tools.updater import Updater
 from speech import speak
-from passwordmeter import test
-from pwnedpasswords import check
 import random
 import time
 import speech_recognition as sr
@@ -809,167 +804,6 @@ class AccessHub(wx.Frame):
             event.Veto()
         else:
             self.perform_app_exit()
-
-
-class PasswordDoctorDialog(wx.Dialog):
-    def __init__(self, parent):
-        super().__init__(parent, title="Password Doctor", size=(400, 250))
-        self.SetBackgroundColour(wx.Colour("#f5f5f5"))  # Light gray background
-
-        panel = wx.Panel(self)
-        vbox = wx.BoxSizer(wx.VERTICAL)
-
-        self.password_label = wx.StaticText(panel, label="Enter Password:")
-        vbox.Add(self.password_label, 0, wx.ALL | wx.ALIGN_LEFT, 10)
-
-        self.password_text = wx.TextCtrl(panel, style=wx.TE_PASSWORD)
-        self.password_text.Bind(wx.EVT_TEXT, self.on_password_change)
-        vbox.Add(self.password_text, 0, wx.ALL | wx.EXPAND, 10)
-
-        self.feedback_label = wx.StaticText(panel, label="")  # Initially empty
-        vbox.Add(self.feedback_label, 0, wx.ALL | wx.ALIGN_LEFT, 10)
-
-        # Label for strength
-        self.strength_label = wx.StaticText(panel, label="Strength: Unknown")  # Strength label
-        vbox.Add(self.strength_label, 0, wx.ALL | wx.ALIGN_LEFT, 10)
-
-        self.progress_bar = wx.Gauge(panel, range=100, size=(200, 25), style=wx.GA_HORIZONTAL)
-        vbox.Add(self.progress_bar, 0, wx.ALL| wx.ALIGN_CENTER, 10)
-
-        breach_check_button = wx.Button(panel, label="Check Breaches")
-        breach_check_button.Bind(wx.EVT_BUTTON, self.on_check_breaches)
-        vbox.Add(breach_check_button, 0, wx.ALL | wx.ALIGN_CENTER, 10)
-
-        close_button = wx.Button(panel, label="Close")
-        close_button.Bind(wx.EVT_BUTTON, self.on_close)
-        vbox.Add(close_button, 0, wx.ALL | wx.ALIGN_CENTER, 10)
-
-        panel.SetSizer(vbox)
-
-        self.funny_messages = {
-            (0, 30): ["Password's so weak, even a kitten could hack it!", "This password is basically made of tissue paper.", "You're asking to be hacked!"],
-            (31, 50): ["Not bad, but hackers are still smirking.", "It's like a lukewarm cup of coffee: not strong enough."],
-            (51, 75): ["Getting there! This password is average at best.", "Nice try, but it's not Fort Knox material yet."],
-            (76, 90): ["Now we're talking! Hackers are sweating a little.", "Almost a masterpiece—add more spice!", "Decent, but don’t brag."],
-            (91, 100): ["This password laughs at hackers!", "You’ve built the Great Wall of Passwords. Bravo!"],
-        }
-
-
-    def on_password_change(self, event):
-        password = self.password_text.GetValue()
-        strength, _ = test(password)
-
-        # Calculate progress value (0-100 based on strength)
-        progress_value = int(strength * 100)
-        self.progress_bar.SetValue(progress_value)
-
-        # Set strength label
-        if progress_value < 30:
-            strength_text = "Very Weak"
-        elif progress_value < 50:
-            strength_text = "Weak"
-        elif progress_value < 75:
-            strength_text = "Moderate"
-        elif progress_value < 90:
-            strength_text = "Strong"
-        else:
-            strength_text = "Very Strong"
-        self.strength_label.SetLabel(f"Strength: {strength_text}")
-
-        # Get and display a funny message
-        funny_message = self.get_funny_message(progress_value)
-        self.feedback_label.SetLabel(f"{funny_message}")
-        speak(f"{strength_text}. {funny_message}")
-
-    def get_funny_message(self, progress_value):
-        """Select a funny message based on the progress value."""
-        for range_limits, messages in self.funny_messages.items():
-            if range_limits[0] <= progress_value <= range_limits[1]:
-                return random.choice(messages)
-
-    def on_check_breaches(self, event):
-        password = self.password_text.GetValue()
-        if not password:
-            wx.MessageBox("Please enter a password to check!", "No Password", wx.OK | wx.ICON_WARNING)
-            return
-
-        # Check if the password has been compromised
-        breached = check(password)
-        message = (
-            "This password is so famous, it made the breach hall of fame! Change it, Unless you like surprises!"
-            if breached
-            else "This password is a fortress. No breaches found. Keep it up!"
-        )
-
-        wx.MessageBox(message, "Breach Check Result", wx.OK | wx.ICON_INFORMATION)
-        speak(message)
-
-    def on_close(self, event):
-        self.Destroy()
-
-
-class NetworkPlayerFrame(wx.Frame):
-    def __init__(self, parent, title):
-        super(NetworkPlayerFrame, self).__init__(parent, title=title, size=(400, 200))
-        # parent is AccessHub
-        self.access_hub_instance = parent 
-        panel = wx.Panel(self)
-        vbox = wx.BoxSizer(wx.VERTICAL)
-
-        youtube_button = wx.Button(panel, label="Search in YouTube")
-        youtube_button.Bind(wx.EVT_BUTTON, self.on_youtube_search)  # Not implemented yet
-        vbox.Add(youtube_button, 0, wx.ALL | wx.CENTER, 10)
-
-        youtube_link_button = wx.Button(panel, label="Play a youtube link")
-        youtube_link_button.Bind(wx.EVT_BUTTON, self.on_youtube_link)
-        vbox.Add(youtube_link_button, 0, wx.ALL | wx.CENTER, 10)
-
-        direct_link_button = wx.Button(panel, label="Play a direct Link")
-        direct_link_button.Bind(wx.EVT_BUTTON, self.on_direct_link)
-        vbox.Add(direct_link_button, 0, wx.ALL | wx.CENTER, 10)
-
-        favorites_button = wx.Button(panel, label="Favorite videos")
-        favorites_button.Bind(wx.EVT_BUTTON, self.on_open_favorites)
-        vbox.Add(favorites_button, 0, wx.ALL | wx.CENTER, 10)
-
-        panel.SetSizer(vbox)
-        self.Centre()
-        self.Show(True)
-
-
-    def on_youtube_search(self, event):
-        searchdlg = YoutubeSearchDialog(self, self)
-        searchdlg.ShowModal()
-        searchdlg.Destroy()
-
-    def on_direct_link(self, event):
-        dlg = wx.TextEntryDialog(self, "Enter the direct link:", "Play stream from a direct link")
-        if dlg.ShowModal() == wx.ID_OK:
-            link = dlg.GetValue()
-            self.play_video(link)
-        dlg.Destroy()
-
-    def on_youtube_link(self, event):
-        streamerdlg = YoutubeStreamer(self)
-        streamerdlg.ShowModal()
-        streamerdlg.Destroy()
-
-    def on_open_favorites(self, event):
-        """Opens the Favorites window."""
-        self.Hide()
-        favorites_frame = FavoritesFrame(self.access_hub_instance, calling_frame_to_show_on_my_close=self)
-        self.access_hub_instance.add_child_frame(favorites_frame)
-        favorites_frame.Show()
-
-    def play_video(self, link):
-        self.player = DirectLinkPlayer(self, "Direct link Player", link)
-        self.player.Bind(EVT_VLC_READY, self.player.onVlcReady)
-        self.player.Bind(wx.EVT_CLOSE, self.player.OnClose)
-
-    def OnClose(self, event):
-        if hasattr(self, 'player') and self.player:
-            self.player.Close()
-        event.Skip()
 
 
 if __name__ == "__main__":
