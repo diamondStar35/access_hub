@@ -1,6 +1,8 @@
 import wx
 from .multi_rename import MultipleRename
 from .advanced_search import AdvancedSearchDialog
+from .media_converter import MediaConverter
+
 
 class FileTools(wx.Frame):
     def __init__(self, parent, title):
@@ -24,6 +26,10 @@ class FileTools(wx.Frame):
         search_button.Bind(wx.EVT_BUTTON, self.on_advanced_search)
         vbox.Add(search_button, 0, wx.ALL | wx.EXPAND, 10)
 
+        converter_button = wx.Button(panel, label="Media Converter")
+        converter_button.Bind(wx.EVT_BUTTON, self.on_media_converter)
+        vbox.Add(converter_button, 0, wx.ALL | wx.EXPAND, 10)
+
         panel.SetSizer(vbox)
         self.Layout()
         self.Centre()
@@ -41,6 +47,12 @@ class FileTools(wx.Frame):
         search_dialog.ShowModal()
         search_dialog.Destroy()
         self.Show()
+
+    def on_media_converter(self, event):
+        """Opens the Media Converter tool."""
+        converter_frame = MediaConverter(self, title="Media Converter")
+        converter_frame.Show()
+        self.Hide()
 
     def on_child_tool_close(self, child_frame_being_closed):
         self.Show()
