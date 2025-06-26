@@ -231,7 +231,7 @@ class YoutubePlayer(wx.Frame):
         if self.loading_dialog:
             self.loading_dialog.Destroy()
         self.Show()
-        self.SetFocus() #Give focus to the main frame
+        self.SetFocus()
 
     def on_time_changed(self, event):
         """Handles the MediaPlayerTimeChanged event to display subtitles."""
@@ -435,18 +435,27 @@ class YoutubePlayer(wx.Frame):
             speak("Current volume is unknown")
 
     def play_next_video(self):
+        if self.player is None or self.player.get_length() is None:
+            return
+
         if self.current_index < len(self.results) - 1:
             self.current_index += 1
             self.play_video_at_index(self.current_index)
             speak("Loading next video, Please wait...")
 
     def play_previous_video(self):
+        if self.player is None or self.player.get_length() is None:
+            return
+
         if self.current_index > 0:
             self.current_index -= 1
             self.play_video_at_index(self.current_index)
             speak("Loading previous video, Please wait...")
 
     def play_video_at_index(self, index):
+        if self.player is None or self.player.get_length() is None:
+            return
+
         selected_video = self.results[index]
         if self.player:
             self.player.stop()
