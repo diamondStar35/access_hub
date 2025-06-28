@@ -399,21 +399,3 @@ class ElevenLabs(wx.Frame):
         dialog.ShowModal()
         if dialog:
              dialog.Destroy()
-
-
-class ElevenLabsSettings(SettingsPanel):
-    category_name = "ElevenLabs"
-
-    def create_controls(self):
-        self.api_key_label = wx.StaticText(self, label="API Key:")
-        self.api_key_text = wx.TextCtrl(self, style=wx.TE_PASSWORD)  # Password style
-        self.sizer.Add(self.api_key_label, 0, wx.ALL, 5)
-        self.sizer.Add(self.api_key_text, 0, wx.EXPAND | wx.ALL, 5)
-
-    def load_settings(self):
-        api_key = self.config.get('ElevenLabs', {}).get('api_key', '')
-        self.api_key_text.SetValue(api_key)
-
-    def save_settings(self):
-        self.config['ElevenLabs'] = {}
-        self.config['ElevenLabs']['api_key'] = self.api_key_text.GetValue()

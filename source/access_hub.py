@@ -5,20 +5,22 @@ import app_guard
 from app_guard import AppGuard, AppGuardError, IPCMsg
 import os, sys, subprocess, re, platform, shutil
 import app_vars
-from gui.settings import SettingsDialog, GeneralSettingsPanel, load_app_config, get_settings_path
+from gui.settings import SettingsDialog, GeneralSettingsPanel, AISettingsPanel, load_app_config, get_settings_path
 from gui.dialogs import AccessTaskBarIcon, ContactDialog, AboutDialog
 from tools.text_utils.text_utils import TextUtilitiesApp
 from tools.text_utils.json_viewer import JsonViewer
 from tools.text_utils.xml_viewer import XMLViewer
 from tools.shutdown_control import ShutdownControl
 from tools.network_player.network_player import NetworkPlayerFrame
+from tools.network_player.settings import YoutubeSettings
 from tools.password_doctor import PasswordDoctorDialog
 from tools.task_scheduler.task_scheduler import TaskScheduler
-from tools.eleven_labs.eleven_labs import ElevenLabs, ElevenLabsSettings
+from tools.eleven_labs.eleven_labs import ElevenLabs
 from tools.accessible_terminal.session_viewer import SessionViewer
 from tools.speed_test import SpeedTest
 from tools.online_tts.online_tts import OnlineTTS
 from tools.file_utils.file_tools import FileTools
+from tools.gemini.chat import GeminiChat
 from tools.updater import Updater
 from speech import speak
 import random
@@ -86,6 +88,7 @@ class AccessHub(wx.Frame):
             ("Internet Speed Test", "Measure your internet connection speed.", self.on_speed_test),
             ("Online Text to Speech", "Convert text to speech using online services.", self.on_online_tts),
             ("File Tools", "Access file management utilities.", self.on_file_tools),
+            ("Gemini Chat", "Chat with Google's Gemini model.", self.on_gemini_chat),
         ]
 
         self.child_frames = [] # List to store child frames
@@ -655,11 +658,17 @@ class AccessHub(wx.Frame):
         self.manage_main_window_visibility(file_tools_frame)
         file_tools_frame.Show()
 
+    def on_gemini_chat(self, event):
+        gemini_frame = GeminiChat(self)
+        self.add_child_frame(gemini_frame)
+        self.manage_main_window_visibility(gemini_frame)
+        gemini_frame.Show()
+
     def on_settings(self, event):
         config_path = get_settings_path()
         settings_dialog = SettingsDialog(self, self.config, config_path)
         settings_dialog.add_category(GeneralSettingsPanel)
-        settings_dialog.add_category(ElevenLabsSettings)
+        settings_dialog.add_category(AISettingsPanel)
         settings_dialog.add_category(YoutubeSettings)
         settings_dialog.ShowModal()
         settings_dialog.Destroy()

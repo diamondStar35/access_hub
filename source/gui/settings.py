@@ -25,6 +25,8 @@ def load_app_config():
         config['General'] = {}
     if 'YouTube' not in config:
          config['YouTube'] = {}
+    if 'Gemini' not in config:
+        config['Gemini'] = {}
     return config
 
 
@@ -185,3 +187,39 @@ class GeneralSettingsPanel(SettingsPanel):
 
     def on_setting_change(self, event):
         self.save_settings() # Save the settings when any option is changed.
+
+class AISettingsPanel(SettingsPanel):
+    category_name = "AI Services"
+
+    def create_controls(self):
+        self.elevenlabs_api_key_label = wx.StaticText(self, label="Eleven Labs API Key:")
+        self.elevenlabs_api_key_text = wx.TextCtrl(self, style=wx.TE_PASSWORD)
+        self.sizer.Add(self.elevenlabs_api_key_label, 0, wx.ALL, 5)
+        self.sizer.Add(self.elevenlabs_api_key_text, 0, wx.ALL, 5)
+
+        gemini_box = wx.StaticBox(self, label="Google Gemini")
+        gemini_sizer = wx.StaticBoxSizer(gemini_box, wx.VERTICAL)
+
+        self.gemini_api_key_label = wx.StaticText(self, label="API Key:")
+        self.gemini_api_key_text = wx.TextCtrl(self, style=wx.TE_PASSWORD)
+        gemini_sizer.Add(self.gemini_api_key_label, 0, wx.ALL, 5)
+        gemini_sizer.Add(self.gemini_api_key_text, 0, wx.EXPAND | wx.ALL, 5)
+
+        gemini_api_key_link = wx.adv.HyperlinkCtrl(self, wx.ID_ANY, "Get your Gemini API Key from Google AI Studio", "https://aistudio.google.com/app/apikey")
+        gemini_sizer.Add(gemini_api_key_link, 0, wx.ALL, 5)
+        self.sizer.Add(gemini_sizer, 0, wx.EXPAND | wx.ALL, 5)
+
+    def load_settings(self):
+        elevenlabs_config = self.config.get('ElevenLabs', {})
+        self.elevenlabs_api_key_text.SetValue(elevenlabs_config.get('api_key', ''))
+
+        gemini_config = self.config.get('Gemini', {})
+        self.gemini_api_key_text.SetValue(gemini_config.get('api_key', ''))
+
+    def save_settings(self):
+        if 'ElevenLabs' not in self.config:
+            self.config['ElevenLabs'] = {}
+        self.config['ElevenLabs']['api_key'] = self.elevenlabs_api_key_text.GetValue()
+        if 'Gemini' not in self.config:
+            self.config['Gemini'] = {}
+        self.config['Gemini']['api_key'] = self.gemini_api_key_text.GetValue()
