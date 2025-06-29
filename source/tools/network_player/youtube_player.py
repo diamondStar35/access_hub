@@ -743,13 +743,9 @@ class YoutubePlayer(wx.Frame):
         if clipboard.Open():
             text_data = wx.TextDataObject()
             text_data.SetText(self.youtube_url)
-
-            # Check if SetDataObject is available, if not use SetData
-            if hasattr(clipboard, 'SetDataObject'):
-                clipboard.SetDataObject(text_data)
-            else:
-                clipboard.SetData(text_data)
+            clipboard.SetData(text_data)
             clipboard.Close()
+            clipboard.Flush()
             speak("Link copyed to clipboard", interrupt=True)
         else:
             wx.MessageBox("Could not access clipboard.", "Error", wx.OK | wx.ICON_ERROR)

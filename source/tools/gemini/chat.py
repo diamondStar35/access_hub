@@ -66,9 +66,9 @@ class GeminiChat(wx.Frame):
         try:
             models_list = self.client.models.list()
             for m in models_list:
-                if 'generate_content' in m.supported_actions:
+                if 'generateContent' in m.supported_actions or 'bidiGenerateContent' in m.supported_actions:
                     if m.description:
-                        label = f"{m.display_name}: {m.description}\n\nInternal name: {m.name}"
+                        label = f"{m.display_name}: \n{m.description}.\n\nInternal name: {m.name}"
                     else:
                         label = f"{m.display_name}, {m.name}"
                     self.models[label] = m.name
@@ -150,5 +150,5 @@ class GeminiChat(wx.Frame):
 
     def on_close(self, event):
         self.executor.shutdown(wait=False)
-        self.GetParent().on_child_tool_close(self)
+        self.GetParent().on_child_close(event, self)
         self.Destroy()

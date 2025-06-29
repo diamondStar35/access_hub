@@ -531,6 +531,7 @@ class FavoritesFrame(wx.Frame):
                     text_data.SetText(url)
                     clipboard.SetData(text_data)
                     clipboard.Close()
+                    clipboard.Flush()
                     speak(f"{item_type} link copyed to clipboard", interrupt=True)
                 else:
                     wx.MessageBox("Could not access clipboard.", "Error", wx.OK | wx.ICON_ERROR)
