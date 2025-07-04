@@ -257,7 +257,7 @@ class FavoritesFrame(wx.Frame):
                     media_url = formats[0].get('url') 
             if not media_url:
                 raise ValueError("No playable URL found in yt-dlp output.")            
-            wx.CallAfter(self._create_and_show_player, title, media_url, description, youtube_url)
+            wx.CallAfter(self._create_and_show_player, title, media_url, description, youtube_url, play_as_audio)
 
         except Exception as e:
             wx.CallAfter(self.destroy_loading_dialog)
@@ -333,11 +333,11 @@ class FavoritesFrame(wx.Frame):
             wx.MessageBox(f"No data found for the channel '{channel_title}' or an error occurred.", "Channel Error", wx.OK | wx.ICON_INFORMATION)
             self.Show()
 
-    def _create_and_show_player(self, title, media_url, description, original_youtube_link):
+    def _create_and_show_player(self, title, media_url, description, original_youtube_link, play_as_audio=False):
         """Creates and shows the YoutubePlayer (must be on the main thread)."""
         # YoutubePlayer's 4th arg ('search_results_frame') is the frame to show when player closes.
         # Here, it's self (FavoritesFrame).
-        self.player = YoutubePlayer(None, title, media_url, self, description, original_youtube_link, None, -1)
+        self.player = YoutubePlayer(None, title, media_url, self, description, original_youtube_link, None, -1, play_as_audio=play_as_audio)
         self.player.Bind(EVT_VLC_READY, self.show_when_ready)
 
     def show_when_ready(self, event):

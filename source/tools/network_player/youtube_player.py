@@ -55,7 +55,7 @@ class CommentDownloader:
         threading.Thread(target=worker_thread, daemon=True).start()
 
 class YoutubePlayer(wx.Frame):
-    def __init__(self, parent, title, url, search_results_frame, description, original_youtube_link, results, current_index):
+    def __init__(self, parent, title, url, search_results_frame, description, original_youtube_link, results, current_index, play_as_audio):
         super().__init__(parent, title=title, size=(640, 480))
         self.search_results_frame = search_results_frame
         self.youtube_url = original_youtube_link
@@ -64,7 +64,7 @@ class YoutubePlayer(wx.Frame):
         self.results = results
         self.current_index = current_index
         self.is_fullscreen = False
-        self.is_audio = url.endswith("m4a")
+        self.is_audio = play_as_audio
         self.subtitle_enabled = False
         self.current_subtitle=None
         self.playback_speed = 1.0
@@ -325,6 +325,7 @@ class YoutubePlayer(wx.Frame):
             event.Skip()
 
     def toggle_fullscreen(self):
+        if self.is_audio: return
         self.is_fullscreen = not self.is_fullscreen
         self.ShowFullScreen(self.is_fullscreen)
         if self.is_fullscreen:

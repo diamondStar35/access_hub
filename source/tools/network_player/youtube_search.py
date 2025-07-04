@@ -557,7 +557,7 @@ class YoutubeSearchResults(wx.Frame):
             except ValueError:
                 # Fallback if not found, though it should be.
                 selected_idx = self.results_listbox.GetSelection()
-            wx.CallAfter(self.create_and_show_player, title, media_url, description, url, self.results, selected_idx, frame_to_reactivate_on_player_close)
+            wx.CallAfter(self.create_and_show_player, title, media_url, description, url, self.results, selected_idx, frame_to_reactivate_on_player_close, play_as_audio)
 
         except Exception as e:
             wx.CallAfter(self.destroy_loading_dialog)
@@ -566,8 +566,8 @@ class YoutubeSearchResults(wx.Frame):
                 try: frame_to_reactivate_on_player_close.Show()
                 except (wx.wxAssertionError, RuntimeError): pass
 
-    def create_and_show_player(self, title, url, description, original_youtube_link, results_for_player_nav, current_index_in_nav_list, frame_to_reactivate_on_player_close):
-        self.player = YoutubePlayer(None, title, url, frame_to_reactivate_on_player_close, description, original_youtube_link, results_for_player_nav, current_index_in_nav_list)
+    def create_and_show_player(self, title, url, description, original_youtube_link, results_for_player_nav, current_index_in_nav_list, frame_to_reactivate_on_player_close, play_as_audio=False):
+        self.player = YoutubePlayer(None, title, url, frame_to_reactivate_on_player_close, description, original_youtube_link, results_for_player_nav, current_index_in_nav_list, play_as_audio=play_as_audio)
         self.player.Bind(EVT_VLC_READY, self.show_when_ready)
 
     def show_when_ready(self, event):
