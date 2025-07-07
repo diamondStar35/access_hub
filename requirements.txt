@@ -20,3 +20,4 @@ msspeech
 gtts
 langdetect
 configobj
+google-genai
