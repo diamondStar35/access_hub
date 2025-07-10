@@ -6,10 +6,17 @@ readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
     "accessible-output3",
+    "appguard>=1.0.2",
+    "configobj>=5.0.9",
     "cryptography>=44.0.1",
+    "google-genai>=1.2.0",
+    "gtts>=2.5.4",
     "httpx==0.27.0",
     "keyboard>=0.13.5",
     "keyring>=25.6.0",
+    "langdetect>=1.0.9",
+    "msspeech>=3.7.12",
+    "packaging>=25.0",
     "paramiko>=3.5.1",
     "passwordmeter>=0.1.8",
     "pwnedpasswords>=2.0.0",
