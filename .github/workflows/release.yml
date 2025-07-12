@@ -1,11 +1,9 @@
-# .github/workflows/build-development-release.yml
-
 name: Build and Release Development Version
 
 on:
   push:
     branches:
-      - main # Or your default branch
+      - main
 
 jobs:
   build-and-release:
@@ -31,9 +29,9 @@ jobs:
       - name: Compile application with Nuitka
         working-directory: ./source
         run: |
-          nuitka --follow-imports --standalone --windows-console-mode=disable --include-package=tools --include-package=gui --include-package=pwnedpasswords --include-package=accessible_output3 access_hub.py
+          nuitka --assume-yes-for-downloads --follow-imports --standalone --windows-console-mode=disable --include-package=tools --include-package=gui --include-package=pwnedpasswords --include-package=accessible_output3 access_hub.py
 
-      - name: Copy missing packages to build directory
+      - name: Copy missing Python packages to build directory
         shell: pwsh
         run: |
           $SITEPACKAGES = $(python -c "import sysconfig; print(sysconfig.get_paths()['purelib'])")
@@ -43,13 +41,24 @@ jobs:
           foreach ($pkg in $PACKAGES_TO_COPY) {
             $SOURCE_PATH = Join-Path $SITEPACKAGES $pkg
             if (Test-Path $SOURCE_PATH) {
-              Write-Host "Copying package: $pkg from $SOURCE_PATH"
+              Write-Host "Copying package: $pkg"
               Copy-Item -Path $SOURCE_PATH -Destination $DEST_DIR -Recurse -Force
             } else {
               Write-Error "Could not find package '$pkg' at path '$SOURCE_PATH'"
               exit 1
             }
           }
+
+      - name: Copy local DLLs and folders
+        shell: pwsh
+        run: |
+          $SOURCE_DIR = ".\source"
+          $DEST_DIR = ".\source\access_hub.dist"
+
+          Write-Host "Copying local files to $DEST_DIR"
+          Copy-Item -Path (Join-Path $SOURCE_DIR "libvlc.dll") -Destination $DEST_DIR
+          Copy-Item -Path (Join-Path $SOURCE_DIR "libvlccore.dll") -Destination $DEST_DIR
+          Copy-Item -Path (Join-Path $SOURCE_DIR "plugins") -Destination $DEST_DIR -Recurse -Force
 
       - name: Create Zip Archive of the build
         shell: pwsh
@@ -63,6 +72,5 @@ jobs:
           automatic_release_tag: "latest-dev"
           prerelease: true
           title: "Latest development release"
-
           files: |
             access_hub-dev-build.zip
