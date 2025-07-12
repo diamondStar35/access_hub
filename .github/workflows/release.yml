@@ -1,0 +1,77 @@
+name: Build and Release Development Version
+
+# This workflow runs on every push to the 'main' branch.
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  build-and-release:
+    runs-on: windows-latest
+
+    # We need write permissions for 'contents' to be able to create and update a release.
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      # Installs a specific version of Python.
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      # Installs Nuitka and all packages from the requirements.txt file.
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install nuitka
+          if (Test-Path requirements.txt) { pip install -r requirements.txt }
+
+      - name: Compile application with Nuitka
+        run: |
+          nuitka --follow-imports --standalone --windows-console-mode=disable --include-package=tools --include-package=gui --include-package=pwnedpasswords --include-package=accessible_output3 access_hub.py
+
+      # Manually Copy Missing Packages ---
+      # Nuitka sometimes misses packages. This step finds the site-packages
+      # directory and copies the required libraries into the build folder.
+      - name: Copy missing packages to build directory
+        shell: pwsh
+        run: |
+          $SITEPACKAGES = $(python -c "import site; print(site.getsitepackages()[0])")
+          Write-Host "Site-packages found at: $SITEPACKAGES"
+          $DEST_DIR = ".\access_hub.dist"
+          $PACKAGES_TO_COPY = "langdetect", "accessible_output3", "pwnedpasswords"
+          foreach ($pkg in $PACKAGES_TO_COPY) {
+            Write-Host "Copying package: $pkg"
+            Copy-Item -Path "$SITEPACKAGES\$pkg" -Destination $DEST_DIR -Recurse -Force
+          }
+
+      - name: Create Zip Archive of the build
+        shell: pwsh
+        run: |
+          Compress-Archive -Path .\access_hub.dist\* -DestinationPath access_hub-dev-build.zip -CompressionLevel Optimal
+
+      # Update or Create the Release ---
+      # This is the key step for publishing. It uses a special action that can
+      # update an existing release if the tag name is the same.
+      - name: Update Development Release
+        uses: ncipollo/release-action@v1
+        with:
+          artifacts: "access_hub-dev-build.zip"
+          token: ${{ secrets.GITHUB_TOKEN }}
+          # The name of the release that appears in the GitHub UI.
+          name: "Latest development release"
+
+          # A fixed tag name for our development release. This is how the action
+          # knows which release to update.
+          tagName: "development"
+          allowUpdates: true          
+          prerelease: true
+          body: |
+            Automated development build triggered by commit ${{ github.sha }}.
+            **This is not a stable release.**
+            See the latest changes here: https://github.com/${{ github.repository }}/commit/${{ github.sha }}
