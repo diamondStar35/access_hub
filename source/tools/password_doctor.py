@@ -93,3 +93,7 @@ class PasswordDoctorDialog(wx.Dialog):
             else "This password is a fortress. No breaches found. Keep it up!"
         )
         wx.MessageBox(message, "Breach Check Result", wx.OK | wx.ICON_INFORMATION)
+
+    def on_close(self, event):
+        self.Close()
+        event.Skip()
