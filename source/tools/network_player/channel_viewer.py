@@ -10,7 +10,7 @@ import os
 
 
 class ChannelViewerFrame(wx.Frame):
-    def __init__(self, parent, channel_data_dict, calling_frame_to_show_on_my_close=None):
+    def __init__(self, parent_search_results_frame, channel_data_dict, calling_frame_to_show_on_my_close=None):
         self.channel_data_dict = channel_data_dict
         self.channel_info = {} 
         self.channel_items_list = []
@@ -19,8 +19,8 @@ class ChannelViewerFrame(wx.Frame):
 
         _title = self.channel_data_dict.get('title', self.channel_data_dict.get('channel', 'Channel Viewer'))
         super().__init__(parent_search_results_frame, title=_title, size=(800, 650), style=wx.DEFAULT_FRAME_STYLE | wx.RESIZE_BORDER)
+        self.parent_search_results_frame = parent_search_results_frame
         self.calling_frame_to_show_on_my_close = calling_frame_to_show_on_my_close
-        self.parent_for_sub_frames = parent
         self._extract_channel_details()
         self.load_settings()
 
@@ -190,7 +190,8 @@ class ChannelViewerFrame(wx.Frame):
         if not item_info_for_parent_ysr:
             if event: event.Skip()
             return
-        
+
+        from .youtube_search import YoutubeSearchResults        
         is_playlist = item_info_for_parent_ysr.get('is_playlist', False)
         if is_playlist:
             if self.calling_frame_to_show_on_my_close and \

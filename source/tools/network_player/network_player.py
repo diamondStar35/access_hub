@@ -153,7 +153,7 @@ class NetworkPlayerFrame(wx.Frame):
     def _launch_clipboard_player(self, title, media_url, description, original_youtube_link):
         """Creates and shows the YoutubePlayer from clipboard link info."""
         wx.CallAfter(self._destroy_clipboard_loading_dialog)
-        self.player = YoutubePlayer(parent=None, title=title, url=media_url, search_results_frame=self, description=description, original_youtube_link=original_youtube_link, results=None, current_index=-1)
+        self.player = YoutubePlayer(parent=None, title=title, url=media_url, search_results_frame=self, description=description, original_youtube_link=original_youtube_link, results=None, current_index=-1, play_as_audio=False)
 
     def _destroy_clipboard_loading_dialog(self):
         if self.clipboard_loading_dlg:

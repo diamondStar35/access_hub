@@ -358,7 +358,7 @@ class YoutubeSearchResults(wx.Frame):
             
         except Exception as e:
             error_message = f"Error fetching playlist items: {e}"
-        wx.PostEvent(self, PlaylistItemsFetchEvent(items=playlist_items, error=error_message, playlist_uploader=playlist_uploader, originating_frame_to_reactivate=frame_to_reactivate))
+        wx.PostEvent(self, PlaylistItemsFetchEvent(items=playlist_items, error=error_message, playlist_uploader=playlist_uploader, originating_frame_to_reactivate=frame_to_activate))
 
     def onPlaylistItemsFetched(self, event):
         """Handles the completion of playlist item fetching."""
@@ -400,7 +400,7 @@ class YoutubeSearchResults(wx.Frame):
                 error_message = "Failed to fetch channel data: No information returned."
         except Exception as e:
             error_message = f"Error getting channel data: {e}"
-        wx.PostEvent(self, ChannelDataFetchEvent(data=channel_data, error=error_message, originating_frame_to_reactivate=frame_to_reactivate))
+        wx.PostEvent(self, ChannelDataFetchEvent(data=channel_data, error=error_message, originating_frame_to_reactivate=frame_to_activate))
 
     def onChannelDataFetched(self, event):
         """Handles the completion of channel data fetching."""
@@ -415,8 +415,9 @@ class YoutubeSearchResults(wx.Frame):
                 try: originating_frame_to_reactivate.Show()
                 except (wx.wxAssertionError, RuntimeError): pass
         elif channel_data:
-            wx_parent_cvf = originating_frame_to_reactivate.GetParent() if originating_frame_to_reactivate else self.parent_for_sub_frames
-            channel_viewer_frame = ChannelViewerFrame(wx_parent_cvf, channel_data, calling_frame_to_show_on_my_close=originating_frame_to_reactivate)
+            # The parent of ChannelViewerFrame must be the YoutubeSearchResults frame (originating_frame_to_reactivate)
+            # because ChannelViewerFrame is tightly coupled and calls methods and helpers on its parent.
+            channel_viewer_frame = ChannelViewerFrame(originating_frame_to_reactivate, channel_data, calling_frame_to_show_on_my_close=originating_frame_to_reactivate)
             top_level_parent = wx.GetApp().GetTopWindow()
             if hasattr(top_level_parent, 'add_child_frame'):
                 top_level_parent.add_child_frame(channel_viewer_frame)
