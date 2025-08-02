@@ -684,6 +684,15 @@ class YoutubeSearchResults(wx.Frame):
             play_audio_item = self.context_menu.Append(wx.ID_ANY, "Play as Audio")
             self.Bind(wx.EVT_MENU, lambda e: self.onPlay(e, play_as_audio=True, item_info=selected_item_info), play_audio_item)
 
+        if not is_channel_item:
+            self.context_menu.AppendSeparator()
+            go_to_channel_item = self.context_menu.Append(wx.ID_ANY, "Go to Channel")
+            self.Bind(wx.EVT_MENU, lambda e: self.onGoToChannel(e, item_info=selected_item_info), go_to_channel_item)
+
+            copy_channel_link_item = self.context_menu.Append(wx.ID_ANY, "Copy Channel Link")
+            self.Bind(wx.EVT_MENU, lambda e: self.onCopyChannelLink(e, item_info=selected_item_info), copy_channel_link_item)
+            self.context_menu.AppendSeparator()
+
         copy_item = self.context_menu.Append(wx.ID_ANY, "Copy Link")
         self.Bind(wx.EVT_MENU, lambda e: self.onCopyLinkFromMenu(e, item_info=selected_item_info), copy_item)
 
@@ -709,6 +718,45 @@ class YoutubeSearchResults(wx.Frame):
         self.Bind(wx.EVT_MENU, self.onToggleFavorite, toggle_favorite_item)
 
         self.PopupMenu(self.context_menu, event.GetPosition())
+
+    def onGoToChannel(self, event, item_info=None):
+        """Fetches channel data for the selected item and opens the ChannelViewer."""
+        if not item_info:
+            item_info = self.get_selected_item_info_from_listbox()
+        if not item_info:
+            wx.MessageBox("Please select an item first.", "Error", wx.OK | wx.ICON_ERROR)
+            return
+
+        original_data = item_info.get('_original_item_data', {})
+        channel_url = original_data.get('channel_url')
+        channel_title = original_data.get('channel', 'Untitled Channel')
+
+        if not channel_url:
+            wx.MessageBox("Could not find the channel link for this item.", "Error", wx.OK | wx.ICON_ERROR)
+            return
+        
+        self.Hide()
+        self.show_loading_dialog(f"Getting channel info for: {channel_title}", "Loading Channel...")
+        threading.Thread(target=self.fetch_channel_data_thread, args=(channel_url, self)).start()
+        if event: event.Skip()
+
+    def onCopyChannelLink(self, event, item_info=None):
+        """Copies the channel URL of the selected item to the clipboard."""
+        if not item_info:
+            item_info = self.get_selected_item_info_from_listbox()
+        if not item_info:
+            wx.MessageBox("Please select an item first.", "Error", wx.OK | wx.ICON_ERROR)
+            return
+
+        original_data = item_info.get('_original_item_data', {})
+        channel_url = original_data.get('channel_url')
+
+        if channel_url:
+            self.copy_to_clipboard(channel_url)
+            speak("Channel link copied to clipboard")
+        else:
+            wx.MessageBox("Could not find the channel link for this item.", "Error", wx.OK | wx.ICON_ERROR)
+        if event: event.Skip()
 
     def onCopyLinkFromMenu(self, event, item_info=None):
         if not item_info:
