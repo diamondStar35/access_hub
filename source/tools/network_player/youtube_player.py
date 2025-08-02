@@ -70,7 +70,10 @@ class YoutubePlayer(wx.Frame):
         self.playback_speed = 1.0
         self.start_time = None
         self.end_time = None
-        self.save_selection_item = None
+        self.start_selection_item = None
+        self.end_selection_item = None
+        self.save_audio_item = None
+        self.save_video_item = None
         # Go up two levels to get to the main directory, then add ffmpeg.exe
         project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
         self.ffmpeg_path = os.path.join(project_root, 'ffmpeg.exe')
@@ -153,12 +156,11 @@ class YoutubePlayer(wx.Frame):
         self.Bind(wx.EVT_MENU, self.on_direct_download_menu_item, direct_download_item)
         video_menu.AppendSubMenu(download_menu, "&Download")
 
-        self.save_selection_item = video_menu.Append(wx.ID_ANY, "Save Selection\tctrl+s")
-        self.Bind(wx.EVT_MENU, self.save_selection, self.save_selection_item)
-        self.save_selection_item.Enable(False) 
-
         go_to_time_item = video_menu.Append(wx.ID_ANY, "Go to Time...\tctrl+g")
         self.Bind(wx.EVT_MENU, self.on_go_to_time, go_to_time_item)
+
+        toggle_fullscreen_item = video_menu.Append(wx.ID_ANY, "Toggle Full Screen\tF")
+        self.Bind(wx.EVT_MENU, lambda event: self.toggle_fullscreen(), toggle_fullscreen_item)
 
         description_item = video_menu.Append(wx.ID_ANY, "Video Description\talt+d")
         self.Bind(wx.EVT_MENU, lambda event: self.show_description(event), description_item)
@@ -176,8 +178,21 @@ class YoutubePlayer(wx.Frame):
         self.Bind(wx.EVT_MENU, self.on_download_subtitle, download_subtitle_item)  # Placeholder binding
         video_menu.AppendSubMenu(subtitle_menu, "&Subtitle")
 
+        selection_menu = wx.Menu()
+        self.start_selection_item = selection_menu.Append(wx.ID_ANY, "Start Selection")
+        self.Bind(wx.EVT_MENU, lambda evt: self.set_start_time(), self.start_selection_item)
+        self.end_selection_item = selection_menu.Append(wx.ID_ANY, "End Selection")
+        self.Bind(wx.EVT_MENU, lambda evt: self.set_end_time(), self.end_selection_item)
+        selection_menu.AppendSeparator()
+        self.save_audio_item = selection_menu.Append(wx.ID_ANY, "Save Selection as Audio\tCtrl+S")
+        self.Bind(wx.EVT_MENU, self.on_save_audio_selection, self.save_audio_item)
+        self.save_video_item = selection_menu.Append(wx.ID_ANY, "Save Selection as Video\tCtrl+Shift+S")
+        self.Bind(wx.EVT_MENU, self.on_save_video_selection, self.save_video_item)
+
         menubar.Append(video_menu, "&Options")
         self.SetMenuBar(menubar)
+        menubar.Append(selection_menu, "&Selection")
+        self.update_save_selection_state()
 
     def init_vlc_thread(self):
         self.instance = vlc.Instance()
@@ -309,8 +324,10 @@ class YoutubePlayer(wx.Frame):
         elif keycode == ord('F') or keycode == ord('f'):
            self.toggle_fullscreen()
         elif keycode == ord('S') or keycode == ord('s'):
-            if modifiers==wx.MOD_CONTROL:
-                self.save_selection(event)
+            if modifiers == wx.MOD_CONTROL | wx.MOD_SHIFT:
+                self.on_save_video_selection(event)
+            elif modifiers == wx.MOD_CONTROL:
+                self.on_save_audio_selection(event)
             else:
                 self.announce_speed()
         elif ord('1') <= keycode <= ord('9'):
@@ -601,7 +618,7 @@ class YoutubePlayer(wx.Frame):
         speak(f"End selection: {self._format_time(self.end_time)}")
         self.update_save_selection_state()
 
-    def save_selection(self, event):
+    def on_save_audio_selection(self, event):
         """Downloads the selected portion of the video as an MP3 file."""
         if self.start_time is None or self.end_time is None:
             speak("Selection not set.")
@@ -617,47 +634,131 @@ class YoutubePlayer(wx.Frame):
                 return
 
             output_path = fileDialog.GetPath()
-            if not output_path.endswith(".mp3"):
+            if not output_path.lower().endswith(".mp3"):
                 output_path += ".mp3"
             self.loading_dialog = wx.ProgressDialog("Downloading Selection", "Please wait...", maximum=100, parent=self, style=wx.PD_APP_MODAL | wx.PD_AUTO_HIDE)
             threading.Thread(target=self.download_and_extract_audio,
                              args=(self.url, output_path, self.start_time, self.end_time)).start()
 
-    def download_and_extract_audio(self, url, output_path, start_time, end_time):
+    def on_save_video_selection(self, event):
+        """Downloads the selected portion of the video as an MP4 file."""
+        if self.is_audio: return
+        if self.start_time is None or self.end_time is None:
+            speak("Selection not set.")
+            return
+
+        if self.start_time >= self.end_time:
+            speak("Invalid selection. Start time must be before end time.")
+            return
+
+        with wx.FileDialog(self, "Save selection as", wildcard="MP4 files (*.mp4)|*.mp4",
+                           style=wx.FD_SAVE | wx.FD_OVERWRITE_PROMPT) as fileDialog:
+            if fileDialog.ShowModal() == wx.ID_CANCEL:
+                return
+
+            output_path = fileDialog.GetPath()
+            if not output_path.lower().endswith(".mp4"):
+                output_path += ".mp4"
+            
+            self.loading_dialog = wx.ProgressDialog("Saving Video Selection", "Please wait...", maximum=100, parent=self, style=wx.PD_APP_MODAL | wx.PD_AUTO_HIDE)
+            threading.Thread(target=self.download_and_extract_video,
+                             args=(self.url, output_path, self.start_time, self.end_time)).start()
+
+    def download_and_extract_video(self, url, output_path, start_time, end_time):
+        """Uses ffmpeg to save a video clip from a stream URL."""
         try:
             start_time_str = time.strftime('%H:%M:%S', time.gmtime(start_time / 1000))
-            end_time_str = time.strftime('%H:%M:%S', time.gmtime(end_time / 1000))
+            duration_seconds = (end_time - start_time) / 1000
 
-            # Construct the ffmpeg command
             cmd = [
                 self.ffmpeg_path,
-                "-y",  # Overwrite output file without asking
+                "-y",
                 "-ss", start_time_str,
-                "-to", end_time_str,
                 "-i", url,
-                "-q:a", "0",
-                "-map", "a",
+                "-t", str(duration_seconds),
+                "-c:v", "copy",
+                "-c:a", "copy",
                 output_path
             ]
 
-            # Execute the ffmpeg command
-            # result = subprocess.run(cmd, capture_output=True, check=False)
             startupinfo = subprocess.STARTUPINFO()
             startupinfo.dwFlags |= subprocess.STARTF_USESHOWWINDOW
             startupinfo.wShowWindow = subprocess.SW_HIDE
-            process = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, startupinfo=startupinfo)
+            process = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, encoding='utf-8', errors='replace', startupinfo=startupinfo)
             stdout, stderr = process.communicate()
+
             if process.returncode != 0:
-                raise subprocess.CalledProcessError(process.returncode, cmd, output=stdout, stderr=stderr)
-            wx.CallAfter(speak, "Selection saved successfully.")
+                # Fallback to re-encoding if stream copy failed
+                speak("Stream copy failed, attempting to re-encode. This will be slower.")
+                wx.CallAfter(self.loading_dialog.Update, 50, "Re-encoding...")
+
+                cmd_reencode = [
+                    self.ffmpeg_path,
+                    "-y",
+                    "-ss", start_time_str,
+                    "-i", url,
+                    "-t", str(duration_seconds),
+                    "-c:v", "libx264",
+                    "-preset", "fast",
+                    "-crf", "22",
+                    "-c:a", "aac",
+                    "-b:a", "192k",
+                    output_path
+                ]
+                process_reencode = subprocess.Popen(cmd_reencode, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, encoding='utf-8', errors='replace', startupinfo=startupinfo)
+                stdout, stderr = process_reencode.communicate()
+                
+                if process_reencode.returncode != 0:
+                    raise subprocess.CalledProcessError(process_reencode.returncode, cmd_reencode, output=stdout, stderr=stderr)
+
+            wx.CallAfter(speak, "Video selection saved successfully.")
         except subprocess.CalledProcessError as e:
-            wx.CallAfter(speak, f"Error saving selection: {e}")
+            error_details = f"FFMPEG Error:\n{e.stderr}"
+            wx.CallAfter(wx.MessageBox, error_details, "Error Saving Video", wx.OK | wx.ICON_ERROR)
+            wx.CallAfter(speak, "Error saving video selection.")
         except (FileNotFoundError, PermissionError) as e:
             wx.CallAfter(speak, str(e))
         except Exception as e:
             wx.CallAfter(speak, f"An unexpected error occurred: {e}")
         finally:
-            wx.CallAfter(self.loading_dialog.Destroy)
+            if self.loading_dialog:
+                wx.CallAfter(self.loading_dialog.Destroy)
+
+    def download_and_extract_audio(self, url, output_path, start_time, end_time):
+        try:
+            start_time_str = time.strftime('%H:%M:%S', time.gmtime(start_time / 1000))
+            duration_seconds = (end_time - start_time) / 1000
+
+            cmd = [
+                self.ffmpeg_path,
+                "-y",
+                "-ss", start_time_str,
+                "-i", url,
+                "-t", str(duration_seconds),
+                "-q:a", "0",
+                "-map", "a",
+                output_path
+            ]
+
+            startupinfo = subprocess.STARTUPINFO()
+            startupinfo.dwFlags |= subprocess.STARTF_USESHOWWINDOW
+            startupinfo.wShowWindow = subprocess.SW_HIDE
+            process = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, encoding='utf-8', errors='replace', startupinfo=startupinfo)
+            stdout, stderr = process.communicate()
+            if process.returncode != 0:
+                raise subprocess.CalledProcessError(process.returncode, cmd, output=stdout, stderr=stderr)
+            wx.CallAfter(speak, "Selection saved successfully.")
+        except subprocess.CalledProcessError as e:
+            error_details = f"FFMPEG Error:\n{e.stderr}"
+            wx.CallAfter(wx.MessageBox, error_details, "Error Saving Audio", wx.OK | wx.ICON_ERROR)
+            wx.CallAfter(speak, "Error saving audio selection.")
+        except (FileNotFoundError, PermissionError) as e:
+            wx.CallAfter(speak, str(e))
+        except Exception as e:
+            wx.CallAfter(speak, f"An unexpected error occurred: {e}")
+        finally:
+            if self.loading_dialog:
+                wx.CallAfter(self.loading_dialog.Destroy)
 
     def process_is_alive(self, process):
         """Checks if the given subprocess is still running."""
@@ -666,12 +767,17 @@ class YoutubePlayer(wx.Frame):
         return process.poll() is None
 
     def update_save_selection_state(self):
-        """Enables or disables the 'Save Selection' menu item based on selection."""
-        if self.save_selection_item:
-            if self.start_time is not None and self.end_time is not None:
-                self.save_selection_item.Enable(True)
-            else:
-                self.save_selection_item.Enable(False)
+        """Enables or disables the 'Save Selection' menu items based on selection and player mode."""
+        is_selection_valid = self.start_time is not None and self.end_time is not None and self.start_time < self.end_time
+
+        # 'Save Audio' is enabled if the selection is valid, regardless of player mode.
+        if self.save_audio_item:
+            self.save_audio_item.Enable(is_selection_valid)
+
+        # 'Save Video' is only enabled if the selection is valid AND the player is in video mode.
+        is_video_mode = not self.is_audio
+        if self.save_video_item:
+            self.save_video_item.Enable(is_selection_valid and is_video_mode)
 
     def on_go_to_time(self, event):
         if not self.player:
