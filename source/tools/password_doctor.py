@@ -2,6 +2,8 @@ import wx
 from passwordmeter import test
 from pwnedpasswords import check
 import random
+from speech import speak
+
 
 class PasswordDoctorDialog(wx.Dialog):
     def __init__(self, parent):
@@ -39,7 +41,8 @@ class PasswordDoctorDialog(wx.Dialog):
         panel.SetSizer(vbox)
 
         self.funny_messages = {
-            (0, 30): ["Password's so weak, even a kitten could hack it!", "This password is basically made of tissue paper.", "You're asking to be hacked!"],
+            (-1, 0): ["Enter a password to check!"],
+            (1, 30): ["Password's so weak, even a kitten could hack it!", "This password is basically made of tissue paper.", "You're asking to be hacked!"],
             (31, 50): ["Not bad, but hackers are still smirking.", "It's like a lukewarm cup of coffee: not strong enough."],
             (51, 75): ["Getting there! This password is average at best.", "Nice try, but it's not Fort Knox material yet."],
             (76, 90): ["Now we're talking! Hackers are sweating a little.", "Almost a masterpiece—add more spice!", "Decent, but don’t brag."],
@@ -56,7 +59,9 @@ class PasswordDoctorDialog(wx.Dialog):
         self.progress_bar.SetValue(progress_value)
 
         # Set strength label
-        if progress_value < 30:
+        if progress_value < 1:
+            strength_text = "Enter a password to check"
+        elif progress_value < 30:
             strength_text = "Very Weak"
         elif progress_value < 50:
             strength_text = "Weak"
